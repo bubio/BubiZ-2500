@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, "claude/**"]
     # ビルドに関係するファイルが変わったときだけ実行する
     paths:
       - "core/**"
