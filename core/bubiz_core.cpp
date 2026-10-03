@@ -11,6 +11,7 @@
 extern std::string cpp_homedir;
 
 static EMU *g_emu = NULL;
+static bool g_config_loaded = false;
 
 void bubiz_set_data_dir(const char *dir)
 {
@@ -26,8 +27,9 @@ bool bubiz_create(void)
 	if(g_emu != NULL) {
 		return true;
 	}
-	// 設定ファイルが無ければ既定値で初期化される
-	load_config(create_local_path(_T("%s.ini"), _T(CONFIG_NAME)));
+	if(!g_config_loaded) {
+		bubiz_load_config(CONFIG_NAME ".ini");
+	}
 	g_emu = new EMU();
 	return true;
 }
@@ -40,7 +42,26 @@ void bubiz_destroy(void)
 
 void bubiz_load_config(const char *name)
 {
+	// 設定ファイルが無ければ既定値で初期化される
 	load_config(create_local_path(_T("%s"), name));
+	g_config_loaded = true;
+}
+
+bool bubiz_set_config(const char *key, int value)
+{
+	if(!g_config_loaded) {
+		bubiz_load_config(CONFIG_NAME ".ini");
+	}
+	std::string k = key;
+	if(k == "boot_mode") config.boot_mode = value;
+	else if(k == "monitor_type") config.monitor_type = value;
+	else if(k == "option_switch") config.option_switch = value;
+	else if(k == "sound_frequency") config.sound_frequency = value;
+	else if(k == "sound_latency") config.sound_latency = value;
+	else if(k == "scan_line") config.scan_line = (value != 0);
+	else if(k == "printer_type") config.printer_type = value;
+	else return false;
+	return true;
 }
 
 void bubiz_save_config(const char *name)
@@ -255,6 +276,16 @@ void bubiz_capture_screen(void)
 	if(g_emu) {
 		g_emu->capture_screen();
 	}
+}
+
+bool bubiz_write_screenshot(const char *path)
+{
+	if(g_emu == NULL) {
+		return false;
+	}
+	OSD *osd = g_emu->get_osd();
+	osd->write_bitmap_to_file(const_cast<bitmap_t *>(osd->get_draw_buffer()), path);
+	return true;
 }
 
 void bubiz_start_record_sound(void)

@@ -1,0 +1,114 @@
+package bubiz
+
+import "core:fmt"
+import "core:os"
+import "core:strings"
+
+main :: proc() {
+	opt, err := parse_args(os.args[1:])
+	if err != "" {
+		exit_with_error(err)
+	}
+	if opt.help {
+		usage()
+		return
+	}
+	if opt.version {
+		print_version()
+		return
+	}
+
+	// データディレクトリ（設定・ROM・ステート）
+	data_dir := opt.rom_dir if opt.rom_dir != "" else default_data_dir()
+	if !ensure_dir(data_dir) {
+		exit_with_error(fmt.aprintf("ディレクトリを作成できません: %s", display_path(data_dir)))
+	}
+	if opt.verbose > 0 {
+		fmt.printfln("データディレクトリ: %s", display_path(data_dir))
+	}
+	set_data_dir(strings.clone_to_cstring(data_dir))
+
+	// 設定の読み込みとオプションによる上書き
+	if !opt.no_config {
+		load_config("mz2500.ini")
+	}
+	apply_options(opt)
+
+	if !create() {
+		exit_with_error("エミュレーションコアの初期化に失敗しました")
+	}
+	defer destroy()
+
+	insert_media(opt)
+	if opt.resume {
+		path := opt.resume_file if opt.resume_file != "" else fmt.tprintf("%s/mz2500.sta0", data_dir)
+		load_state(strings.clone_to_cstring(path, context.temp_allocator))
+	}
+
+	if opt.headless > 0 {
+		run_headless(opt)
+	} else {
+		run_frontend(opt)
+	}
+
+	if opt.save_config {
+		save_config("mz2500.ini")
+	}
+}
+
+// CLIオプションをコア設定へ反映する
+apply_options :: proc(opt: Options) {
+	if opt.boot_mode >= 0 {set_config("boot_mode", i32(opt.boot_mode))}
+	if opt.monitor_type >= 0 {set_config("monitor_type", i32(opt.monitor_type))}
+	if opt.option_switch >= 0 {set_config("option_switch", i32(opt.option_switch))}
+	if opt.scan_line >= 0 {set_config("scan_line", i32(opt.scan_line))}
+	if opt.sample_freq > 0 {
+		for hz, idx in SOUND_RATES {
+			if hz == opt.sample_freq {
+				set_config("sound_frequency", i32(idx))
+			}
+		}
+	}
+}
+
+// 指定されたイメージを各ドライブへ挿入する
+insert_media :: proc(opt: Options) {
+	for i in 0 ..< opt.floppy_count {
+		img := opt.floppies[i]
+		path := resolve_path(opt.disk_dir, img.path)
+		open_floppy(i32(i), strings.clone_to_cstring(path, context.temp_allocator), i32(img.bank))
+	}
+	for hd, i in opt.hard_disks {
+		if hd != "" {
+			open_hard_disk(i32(i), strings.clone_to_cstring(resolve_path(opt.disk_dir, hd), context.temp_allocator))
+		}
+	}
+	if opt.tape_load != "" {
+		play_tape(0, strings.clone_to_cstring(resolve_path(opt.tape_dir, opt.tape_load), context.temp_allocator))
+	}
+	if opt.tape_save != "" {
+		rec_tape(0, strings.clone_to_cstring(resolve_path(opt.tape_dir, opt.tape_save), context.temp_allocator))
+	}
+}
+
+// 相対パスで、基準ディレクトリが指定されていればその下とみなす
+resolve_path :: proc(base, path: string) -> string {
+	if base == "" || os.exists(path) || strings.has_prefix(path, "/") {
+		return path
+	}
+	return fmt.tprintf("%s/%s", base, path)
+}
+
+// ウィンドウ無しで指定フレーム数だけ実行する（CIでの動作確認用）
+run_headless :: proc(opt: Options) {
+	for _ in 0 ..< opt.headless {
+		run()
+		draw_screen()
+	}
+	w, h: i32
+	screen_size(&w, &h)
+	fmt.printfln("%s: %dx%d, %dフレーム実行", device_name(), w, h, opt.headless)
+	if opt.screenshot != "" {
+		write_screenshot(strings.clone_to_cstring(opt.screenshot, context.temp_allocator))
+	}
+}

@@ -1,0 +1,389 @@
+package bubiz
+
+// コマンドラインの解釈（書式はQUASI88に準じる）
+//   bubiz [-option] [image-file [image-No]] ...
+
+import "core:fmt"
+import "core:os"
+import "core:strconv"
+import "core:strings"
+
+FLOPPY_DRIVES :: 4
+
+Image_Kind :: enum {
+	Floppy,
+	Hard_Disk,
+	Tape,
+}
+
+Image_Arg :: struct {
+	path: string,
+	bank: int, // 0始まりのイメージ番号
+	kind: Image_Kind,
+}
+
+Window_Size :: enum {
+	Full, // 標準(640x400)
+	Half,
+	Double,
+}
+
+Options :: struct {
+	// 実行制御
+	help:          bool,
+	version:       bool,
+	verbose:       int,
+	no_config:     bool,
+	save_config:   bool,
+	headless:      int, // >0ならウィンドウ無しでそのフレーム数だけ実行
+	screenshot:    string, // headless終了時に保存するBMP
+	// ディレクトリ
+	rom_dir:       string,
+	disk_dir:      string,
+	tape_dir:      string,
+	snap_dir:      string,
+	state_dir:     string,
+	// イメージ
+	floppies:      [FLOPPY_DRIVES]Image_Arg,
+	floppy_count:  int,
+	hard_disks:    [2]string,
+	tape_load:     string,
+	tape_save:     string,
+	// エミュレーション
+	boot_mode:     int, // -1=未指定
+	monitor_type:  int,
+	scan_line:     int, // -1=未指定
+	option_switch: int,
+	// 画面・音・入力
+	fullscreen:    bool,
+	window_size:   Window_Size,
+	width:         int,
+	height:        int,
+	wait:          bool, // false=ウェイト無し(全速)
+	speed:         int, // 実時間との比率(%)
+	sound:         bool,
+	sample_freq:   int,
+	mouse:         bool,
+	joystick:      bool,
+	show_fps:      bool,
+	resume:        bool,
+	resume_file:   string,
+}
+
+default_options :: proc() -> Options {
+	return Options{
+		boot_mode = -1,
+		monitor_type = -1,
+		scan_line = -1,
+		option_switch = -1,
+		wait = true,
+		speed = 100,
+		sound = true,
+		joystick = true,
+		window_size = .Full,
+	}
+}
+
+Parse_Error :: struct {
+	message: string,
+}
+
+// イメージ種別を拡張子から判定する
+image_kind_of :: proc(path: string) -> Image_Kind {
+	lower := strings.to_lower(path, context.temp_allocator)
+	for ext in ([]string{".hdd", ".hdi", ".nhd", ".thd", ".dat"}) {
+		if strings.has_suffix(lower, ext) {
+			return .Hard_Disk
+		}
+	}
+	for ext in ([]string{".wav", ".mzt", ".m12", ".mti", ".cas", ".cmt", ".t88"}) {
+		if strings.has_suffix(lower, ext) {
+			return .Tape
+		}
+	}
+	return .Floppy
+}
+
+// 次の引数が値として存在するか確認して取り出す
+@(private = "file")
+take_value :: proc(args: []string, i: ^int, name: string) -> (value: string, ok: bool) {
+	if i^ + 1 >= len(args) {
+		return "", false
+	}
+	i^ += 1
+	return args[i^], true
+}
+
+@(private = "file")
+take_int :: proc(args: []string, i: ^int, name: string) -> (value: int, err: string) {
+	s, ok := take_value(args, i, name)
+	if !ok {
+		return 0, fmt.aprintf("オプション %s には値が必要です", name)
+	}
+	v, parsed := strconv.parse_int(s)
+	if !parsed {
+		return 0, fmt.aprintf("オプション %s の値が整数ではありません: %s", name, s)
+	}
+	return v, ""
+}
+
+@(private = "file")
+all_digits :: proc(s: string) -> bool {
+	if len(s) == 0 {
+		return false
+	}
+	for c in s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// 引数列を解釈する。errorが空でなければ不正。
+parse_args :: proc(args: []string) -> (opt: Options, err: string) {
+	opt = default_options()
+	last_floppy := -1 // 直近のフロッピー引数(イメージ番号の受け取り先)
+	numbered := -1 // 番号を受け取ったフロッピー(同一ファイルの2台目指定に使う)
+
+	for i := 0; i < len(args); i += 1 {
+		a := args[i]
+		if len(a) == 0 {
+			continue
+		}
+		if a[0] != '-' {
+			// イメージ番号: 直前のフロッピーに続く数字
+			if last_floppy >= 0 && all_digits(a) {
+				n, _ := strconv.parse_int(a)
+				if n < 1 {
+					return opt, fmt.aprintf("イメージ番号は1以上です: %s", a)
+				}
+				opt.floppies[last_floppy].bank = n - 1
+				numbered = last_floppy
+				last_floppy = -1
+				continue
+			}
+			// ファイルが1つだけのとき、続けて番号を指定すると同じファイルを2台目にも割り当てる
+			if numbered == 0 && opt.floppy_count == 1 && all_digits(a) {
+				n, _ := strconv.parse_int(a)
+				if n < 1 {
+					return opt, fmt.aprintf("イメージ番号は1以上です: %s", a)
+				}
+				opt.floppies[1] = Image_Arg{path = opt.floppies[0].path, bank = n - 1, kind = .Floppy}
+				opt.floppy_count = 2
+				numbered = -1
+				continue
+			}
+			numbered = -1
+			kind := image_kind_of(a)
+			switch kind {
+			case .Floppy:
+				if opt.floppy_count < FLOPPY_DRIVES {
+					opt.floppies[opt.floppy_count] = Image_Arg{path = a, kind = .Floppy}
+					last_floppy = opt.floppy_count
+					opt.floppy_count += 1
+				} // 超過分は無視（QUASI88と同様）
+			case .Hard_Disk:
+				if opt.hard_disks[0] == "" {
+					opt.hard_disks[0] = a
+				} else {
+					opt.hard_disks[1] = a
+				}
+				last_floppy = -1
+			case .Tape:
+				opt.tape_load = a
+				last_floppy = -1
+			}
+			continue
+		}
+
+		last_floppy = -1
+		numbered = -1
+		name := a
+		// "--option" も "-option" として扱う
+		if strings.has_prefix(name, "--") {
+			name = name[1:]
+		}
+		msg: string
+		switch name {
+		case "-help", "-h", "-?":
+			opt.help = true
+		case "-version":
+			opt.version = true
+		case "-verbose":
+			opt.verbose, msg = take_int(args, &i, name)
+		case "-noconfig":
+			opt.no_config = true
+		case "-saveconfig":
+			opt.save_config = true
+		case "-nosaveconfig":
+			opt.save_config = false
+		case "-romdir":
+			v, ok := take_value(args, &i, name)
+			if !ok {return opt, "オプション -romdir には値が必要です"}
+			opt.rom_dir = v
+		case "-diskdir":
+			v, ok := take_value(args, &i, name)
+			if !ok {return opt, "オプション -diskdir には値が必要です"}
+			opt.disk_dir = v
+		case "-tapedir":
+			v, ok := take_value(args, &i, name)
+			if !ok {return opt, "オプション -tapedir には値が必要です"}
+			opt.tape_dir = v
+		case "-snapdir":
+			v, ok := take_value(args, &i, name)
+			if !ok {return opt, "オプション -snapdir には値が必要です"}
+			opt.snap_dir = v
+		case "-statedir":
+			v, ok := take_value(args, &i, name)
+			if !ok {return opt, "オプション -statedir には値が必要です"}
+			opt.state_dir = v
+		case "-diskimage":
+			v, ok := take_value(args, &i, name)
+			if !ok {return opt, "オプション -diskimage には値が必要です"}
+			if opt.floppy_count < FLOPPY_DRIVES {
+				opt.floppies[opt.floppy_count] = Image_Arg{path = v, kind = .Floppy}
+				last_floppy = opt.floppy_count
+				opt.floppy_count += 1
+			}
+		case "-hd1", "-hd2":
+			v, ok := take_value(args, &i, name)
+			if !ok {return opt, fmt.aprintf("オプション %s には値が必要です", name)}
+			opt.hard_disks[0 if name == "-hd1" else 1] = v
+		case "-tapeload":
+			v, ok := take_value(args, &i, name)
+			if !ok {return opt, "オプション -tapeload には値が必要です"}
+			opt.tape_load = v
+		case "-tapesave":
+			v, ok := take_value(args, &i, name)
+			if !ok {return opt, "オプション -tapesave には値が必要です"}
+			opt.tape_save = v
+		case "-mz2500":
+			opt.boot_mode = 0
+		case "-mz2000":
+			opt.boot_mode = 1
+		case "-mz80b":
+			opt.boot_mode = 2
+		case "-monitor":
+			opt.monitor_type, msg = take_int(args, &i, name)
+		case "-optsw":
+			opt.option_switch, msg = take_int(args, &i, name)
+		case "-skipline", "-interlace":
+			opt.scan_line = 0
+		case "-nointerlace", "-scanline":
+			opt.scan_line = 1
+		case "-full":
+			opt.window_size = .Full
+		case "-half":
+			opt.window_size = .Half
+		case "-double":
+			opt.window_size = .Double
+		case "-fullscreen":
+			opt.fullscreen = true
+		case "-window":
+			opt.fullscreen = false
+		case "-width":
+			opt.width, msg = take_int(args, &i, name)
+		case "-height":
+			opt.height, msg = take_int(args, &i, name)
+		case "-wait":
+			opt.wait = true
+		case "-nowait":
+			opt.wait = false
+		case "-speed":
+			opt.speed, msg = take_int(args, &i, name)
+			if msg == "" && opt.speed <= 0 {
+				msg = "オプション -speed の値は1以上です"
+			}
+		case "-sound", "-snd":
+			opt.sound = true
+		case "-nosound", "-nosnd":
+			opt.sound = false
+		case "-samplefreq", "-sf":
+			opt.sample_freq, msg = take_int(args, &i, name)
+		case "-mouse":
+			opt.mouse = true
+		case "-nomouse":
+			opt.mouse = false
+		case "-joystick", "-use_joy":
+			opt.joystick = true
+		case "-nojoystick", "-nouse_joy":
+			opt.joystick = false
+		case "-show_fps":
+			opt.show_fps = true
+		case "-hide_fps":
+			opt.show_fps = false
+		case "-resume":
+			opt.resume = true
+		case "-resumefile":
+			v, ok := take_value(args, &i, name)
+			if !ok {return opt, "オプション -resumefile には値が必要です"}
+			opt.resume = true
+			opt.resume_file = v
+		case "-headless":
+			opt.headless, msg = take_int(args, &i, name)
+		case "-screenshot":
+			v, ok := take_value(args, &i, name)
+			if !ok {return opt, "オプション -screenshot には値が必要です"}
+			opt.screenshot = v
+		case:
+			return opt, fmt.aprintf("不明なオプションです: %s", a)
+		}
+		if msg != "" {
+			return opt, msg
+		}
+	}
+	return opt, ""
+}
+
+usage :: proc() {
+	fmt.println("使い方: bubiz [-option] [image-file [image-No]] [image-file [image-No]] ...")
+	fmt.println()
+	fmt.println("  イメージファイルは拡張子で判定します。フロッピーは最大4台(ドライブ1:〜4:)に")
+	fmt.println("  先頭から順に割り当てます。直後の数字は複数イメージ内の番号(1始まり)です。")
+	fmt.println()
+	fmt.println("  -help               このヘルプを表示して終了")
+	fmt.println("  -version            バージョンを表示して終了")
+	fmt.println("  -verbose <n>        冗長レベル")
+	fmt.println("  -romdir <path>      BIOS ROM・設定・ステートのディレクトリ")
+	fmt.println("  -diskdir <path>     ディスクイメージのディレクトリ")
+	fmt.println("  -tapedir <path>     テープイメージのディレクトリ")
+	fmt.println("  -snapdir <path>     スナップショット保存先")
+	fmt.println("  -statedir <path>    ステート保存先")
+	fmt.println("  -noconfig           設定ファイルを読み込まない")
+	fmt.println("  -saveconfig         終了時に設定ファイルを更新する")
+	fmt.println("  -nosaveconfig       終了時に設定ファイルを更新しない")
+	fmt.println("  -hd1 <file>         ハードディスク1を接続")
+	fmt.println("  -hd2 <file>         ハードディスク2を接続")
+	fmt.println("  -tapeload <file>    ロード用テープイメージ")
+	fmt.println("  -tapesave <file>    セーブ用テープイメージ")
+	fmt.println("  -mz2500 | -mz2000 | -mz80b   起動モード")
+	fmt.println("  -monitor <n>        モニタータイプ")
+	fmt.println("  -optsw <n>          オプションスイッチ(拡張ボード構成)")
+	fmt.println("  -skipline | -interlace   走査線を描画しない")
+	fmt.println("  -nointerlace | -scanline 走査線を描画する")
+	fmt.println("  -full | -half | -double  画面サイズ(640x400 / 320x200 / 1280x800)")
+	fmt.println("  -fullscreen | -window    フルスクリーン / ウィンドウ")
+	fmt.println("  -width <x> -height <y>   ウィンドウサイズ")
+	fmt.println("  -wait | -nowait     ウェイトあり / なし(全速)")
+	fmt.println("  -speed <rate>       実時間との比率(%)")
+	fmt.println("  -sound | -nosound   サウンドの有無")
+	fmt.println("  -samplefreq <hz>    サンプリング周波数")
+	fmt.println("  -mouse | -nomouse   マウスのエミュレート")
+	fmt.println("  -joystick | -nojoystick   ジョイスティックのエミュレート")
+	fmt.println("  -show_fps | -hide_fps     FPS表示")
+	fmt.println("  -resume             起動時にステートをロード")
+	fmt.println("  -resumefile <file>  起動時に指定ステートをロード")
+	fmt.println("  -headless <frames>  ウィンドウ無しで指定フレーム数実行して終了(検証用)")
+	fmt.println("  -screenshot <file>  -headless終了時の画面をBMPで保存")
+}
+
+print_version :: proc() {
+	fmt.printfln("BubiZ-2500 %s", VERSION)
+}
+
+exit_with_error :: proc(msg: string) -> ! {
+	fmt.eprintfln("bubiz: %s", msg)
+	fmt.eprintln("ヘルプは bubiz -help を参照してください。")
+	os.exit(2)
+}

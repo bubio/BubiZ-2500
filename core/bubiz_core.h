@@ -19,13 +19,18 @@ extern "C" {
 // bubiz_create より前に呼ぶこと。
 void bubiz_set_data_dir(const char *dir);
 
-// 生成・破棄
-bool bubiz_create(void);
-void bubiz_destroy(void);
-
-// 設定ファイルの読み書き(データディレクトリ内の相対名)
+// 設定ファイル(データディレクトリ内の相対名)を読む。無ければ既定値。bubiz_createより前に呼べる。
 void bubiz_load_config(const char *name);
 void bubiz_save_config(const char *name);
+
+// 設定値の上書き(bubiz_createより前に呼ぶ)。未知のkeyはfalse。
+// key: boot_mode, monitor_type, option_switch, sound_frequency, sound_latency,
+//      scan_line, printer_type
+bool bubiz_set_config(const char *key, int value);
+
+// 生成・破棄(設定が未読込なら既定の設定ファイルを読む)
+bool bubiz_create(void);
+void bubiz_destroy(void);
 
 // エミュレーション駆動: 1フレーム進める。返り値は実行したフレーム数
 int bubiz_run(void);
@@ -71,6 +76,7 @@ void bubiz_load_state(const char *path);
 
 // 録画・キャプチャ
 void bubiz_capture_screen(void);
+bool bubiz_write_screenshot(const char *path);	// 現在の画面をBMPで保存
 void bubiz_start_record_sound(void);
 void bubiz_stop_record_sound(void);
 

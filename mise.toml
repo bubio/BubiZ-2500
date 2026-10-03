@@ -1,0 +1,4 @@
+[tools]
+# Odinコンパイラ。bindings(sokol-odin)の対応バージョンに合わせて更新する
+odin = "latest"
+cmake = "latest"
