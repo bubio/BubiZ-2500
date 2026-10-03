@@ -82,6 +82,7 @@ Options :: struct {
 	mouse:         bool,
 	joystick:      bool,
 	show_fps:      bool,
+	interp:        bool, // 拡大時に補間する(既定は最近傍)
 	resume:        bool,
 	resume_file:   string,
 }
@@ -349,6 +350,10 @@ parse_args :: proc(args: []string) -> (opt: Options, err: string) {
 			opt.joystick = true
 		case "-nojoystick", "-nouse_joy":
 			opt.joystick = false
+		case "-interp":
+			opt.interp = true
+		case "-nointerp":
+			opt.interp = false
 		case "-show_fps":
 			opt.show_fps = true
 		case "-hide_fps":
@@ -435,9 +440,19 @@ usage :: proc() {
 	fmt.println("  -samplefreq <hz>    サンプリング周波数")
 	fmt.println("  -mouse | -nomouse   マウスのエミュレート")
 	fmt.println("  -joystick | -nojoystick   ジョイスティックのエミュレート")
-	fmt.println("  -show_fps | -hide_fps     FPS表示")
+	fmt.println("  -interp | -nointerp       画面の拡大時に補間する / しない(既定: しない)")
+	fmt.println("  -show_fps | -hide_fps     ウィンドウタイトルにFPS(エミュレーション速度)を表示")
 	fmt.println("  -resume             起動時にステートをロード")
 	fmt.println("  -resumefile <file>  起動時に指定ステートをロード")
+	fmt.println()
+	fmt.println("  ウィンドウ上のホットキー:")
+	fmt.println("    F11          フルスクリーンの切り替え")
+	fmt.println("    F12          リセット (Ctrl+F12: スペシャルリセット)")
+	fmt.println("    Ctrl+P       一時停止 / 再開")
+	fmt.println("    Ctrl+S       スクリーンショットを保存(データディレクトリへBMP)")
+	fmt.println("    Ctrl+M       マウスのキャプチャ切り替え(-mouse指定時は最初のクリックでも開始)")
+	fmt.println("    ドラッグ&ドロップ  ディスクイメージ・テープ・ハードディスクを挿入")
+	fmt.println()
 	fmt.println("  -headless <frames>  ウィンドウ無しで指定フレーム数実行して終了(検証用)")
 	fmt.println("  -screenshot <file>  -headless終了時の画面をBMPで保存")
 	fmt.println("  -key <frame>:<key>[:<hold>]  -headless中、指定フレームでキーを押す(複数指定可)")

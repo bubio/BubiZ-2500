@@ -31,6 +31,12 @@ Frontend :: struct {
 	fps_frames: int,
 	title:      cstring,
 	paused:     bool,
+	emu_frames: int, // FPS表示用: エミュレーションを進めたフレーム数
+	// マウス
+	mouse_grab: bool, // マウスをキャプチャ中か
+	mouse_dx:   i32,
+	mouse_dy:   i32,
+	mouse_btn:  i32, // b0=左 b1=右 b2=中
 }
 
 @(private = "file")
@@ -75,7 +81,11 @@ init :: proc "c" () {
 	sg.setup({environment = sglue.environment(), logger = {func = slog.func}})
 	sgl.setup({logger = {func = slog.func}})
 
-	fe.sampler = sg.make_sampler({min_filter = .NEAREST, mag_filter = .NEAREST, wrap_u = .CLAMP_TO_EDGE, wrap_v = .CLAMP_TO_EDGE})
+	filter: sg.Filter = .LINEAR if fe.opt.interp else .NEAREST
+	fe.sampler = sg.make_sampler({min_filter = filter, mag_filter = filter, wrap_u = .CLAMP_TO_EDGE, wrap_v = .CLAMP_TO_EDGE})
+	if fe.opt.mouse {
+		enable_mouse(true)
+	}
 	fe.pass = {
 		colors = {0 = {load_action = .CLEAR, clear_value = {0, 0, 0, 1}}},
 	}
@@ -149,15 +159,23 @@ frame :: proc "c" () {
 			fe.acc += dt * f64(fe.opt.speed) / 100.0
 			for fe.acc >= interval {
 				run()
+				fe.emu_frames += 1
 				fe.acc -= interval
 			}
 		} else {
 			// 全速: 1フレーム分の時間で数フレーム進める
 			for _ in 0 ..< 8 {
 				run()
+				fe.emu_frames += 1
 			}
 			fe.acc = 0
 		}
+	}
+
+	if fe.opt.mouse {
+		// 1フレーム分の移動量とボタン状態をコアへ渡す
+		set_mouse(fe.mouse_dx, fe.mouse_dy, fe.mouse_btn)
+		fe.mouse_dx, fe.mouse_dy = 0, 0
 	}
 
 	draw_screen()
@@ -183,9 +201,15 @@ frame :: proc "c" () {
 	fe.fps_time += dt
 	fe.fps_frames += 1
 	if fe.opt.show_fps && fe.fps_time >= 1.0 {
-		sapp.set_window_title(strings.clone_to_cstring(fmt.tprintf("BubiZ-2500 - %.1f fps", f64(fe.fps_frames) / fe.fps_time), context.temp_allocator))
+		sapp.set_window_title(
+			strings.clone_to_cstring(
+				fmt.tprintf("BubiZ-2500 - %.1f fps (表示 %.1f fps)", f64(fe.emu_frames) / fe.fps_time, f64(fe.fps_frames) / fe.fps_time),
+				context.temp_allocator,
+			),
+		)
 		fe.fps_time = 0
 		fe.fps_frames = 0
+		fe.emu_frames = 0
 	}
 	free_all(context.temp_allocator)
 }
@@ -241,6 +265,20 @@ event :: proc "c" (e: ^sapp.Event) {
 		}
 	case .UNFOCUSED:
 		key_lost_focus()
+		set_mouse_grab(false)
+	case .MOUSE_MOVE:
+		if fe.mouse_grab {
+			fe.mouse_dx += i32(e.mouse_dx)
+			fe.mouse_dy += i32(e.mouse_dy)
+		}
+	case .MOUSE_DOWN:
+		if fe.opt.mouse && !fe.mouse_grab {
+			set_mouse_grab(true) // 最初のクリックでキャプチャを開始
+		} else if fe.mouse_grab {
+			fe.mouse_btn |= mouse_button_bit(e.mouse_button)
+		}
+	case .MOUSE_UP:
+		fe.mouse_btn &= ~mouse_button_bit(e.mouse_button)
 	case .FILES_DROPPED:
 		n := sapp.get_num_dropped_files()
 		for i in 0 ..< n {
@@ -275,8 +313,37 @@ handle_hotkey :: proc(e: ^sapp.Event) -> bool {
 			capture_screen()
 			return true
 		}
+	case .M:
+		if ctrl {
+			set_mouse_grab(!fe.mouse_grab)
+			return true
+		}
 	}
 	return false
+}
+
+@(private = "file")
+mouse_button_bit :: proc(b: sapp.Mousebutton) -> i32 {
+	#partial switch b {
+	case .LEFT: return 1
+	case .RIGHT: return 2
+	case .MIDDLE: return 4
+	}
+	return 0
+}
+
+// マウスのキャプチャを開始/終了し、コアのマウスエミュレーションと同期させる
+@(private = "file")
+set_mouse_grab :: proc(on: bool) {
+	if fe.mouse_grab == on {
+		return
+	}
+	fe.mouse_grab = on
+	fe.mouse_dx, fe.mouse_dy, fe.mouse_btn = 0, 0, 0
+	sapp.lock_mouse(on)
+	enable_mouse(on)
+	// ゲストがマウスを使う場合に備え、キャプチャ中だけ有効にする
+	fe.opt.mouse = true
 }
 
 // ドロップされたファイルをメディアとして挿入する
