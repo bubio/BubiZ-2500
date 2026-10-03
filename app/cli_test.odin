@@ -92,3 +92,14 @@ test_filter_option :: proc(t: ^testing.T) {
 	opt2, _ := parse_args({})
 	testing.expect_value(t, opt2.filter, Screen_Filter.None)
 }
+
+@(test)
+test_aspect :: proc(t: ^testing.T) {
+	opt, msg := parse_args({"-aspect", "480"})
+	testing.expect_value(t, msg, "")
+	testing.expect(t, opt.aspect_480)
+	opt, msg = parse_args({"-aspect", "400"})
+	testing.expect(t, !opt.aspect_480)
+	_, msg = parse_args({"-aspect", "300"})
+	testing.expect(t, msg != "")
+}

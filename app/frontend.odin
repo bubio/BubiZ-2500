@@ -58,13 +58,15 @@ fe: Frontend
 run_frontend :: proc(opt: Options) {
 	fe.opt = opt
 
-	w, h := i32(640), i32(480)
+	// 縦横比に応じた標準サイズ(640x400 / 640x480)を、-half / -double で倍率変更する
+	base_h := i32(opt.aspect_480 ? 480 : 400)
+	w, h := i32(640), base_h
 	switch opt.window_size {
 	case .Full:
 	case .Half:
-		w, h = 320, 240
+		w, h = 320, base_h / 2
 	case .Double:
-		w, h = 1280, 960
+		w, h = 1280, base_h * 2
 	}
 	if opt.width > 0 {w = i32(opt.width)}
 	if opt.height > 0 {h = i32(opt.height)}
@@ -252,6 +254,10 @@ quad_rect :: proc() -> (x0, y0, qw, qh: f32) {
 	}
 	if aw <= 0 || ah <= 0 {
 		return 0, 0, 0, 0
+	}
+	// コアは640x480(4:3)比率を返すので、400比率が選ばれている場合は高さを400にする
+	if !fe.opt.aspect_480 && aw == 640 && ah == 480 {
+		ah = 400
 	}
 	ww, wh := f32(sapp.width()), f32(sapp.height())
 	scale := min(ww / f32(aw), wh / f32(ah))

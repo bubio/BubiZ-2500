@@ -81,6 +81,7 @@ Options :: struct {
 	// 画面・音・入力
 	fullscreen:    bool,
 	window_size:   Window_Size,
+	aspect_480:    bool, // true: 640x480(4:3)比率、false: 640x400比率
 	width:         int,
 	height:        int,
 	wait:          bool, // false=ウェイト無し(全速)
@@ -328,6 +329,16 @@ parse_args :: proc(args: []string) -> (opt: Options, err: string) {
 			opt.window_size = .Half
 		case "-double":
 			opt.window_size = .Double
+		case "-aspect":
+			v: int
+			v, msg = take_int(args, &i, name)
+			if msg == "" {
+				switch v {
+				case 400: opt.aspect_480 = false
+				case 480: opt.aspect_480 = true
+				case: msg = "-aspect には 400 か 480 を指定してください"
+				}
+			}
 		case "-fullscreen":
 			opt.fullscreen = true
 		case "-window":
@@ -465,7 +476,8 @@ usage :: proc() {
 	fmt.println("  -optsw <n>          オプションスイッチ(拡張ボード構成)")
 	fmt.println("  -skipline | -interlace   走査線を描画しない")
 	fmt.println("  -nointerlace | -scanline 走査線を描画する")
-	fmt.println("  -full | -half | -double  画面サイズ(640x400 / 320x200 / 1280x800)")
+	fmt.println("  -full | -half | -double  画面サイズ(標準 / 半分 / 2倍)")
+	fmt.println("  -aspect <400|480>        画面の縦横比(640x400 / 640x480、既定は400)")
 	fmt.println("  -fullscreen | -window    フルスクリーン / ウィンドウ")
 	fmt.println("  -width <x> -height <y>   ウィンドウサイズ")
 	fmt.println("  -wait | -nowait     ウェイトあり / なし(全速)")
