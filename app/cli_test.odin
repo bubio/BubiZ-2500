@@ -45,3 +45,22 @@ test_missing_value :: proc(t: ^testing.T) {
 	_, err := parse_args({"-romdir"})
 	testing.expect(t, err != "", "値が無い場合はエラー")
 }
+
+@(test)
+test_key_event :: proc(t: ^testing.T) {
+	opt, err := parse_args({"-key", "3000:1", "-key", "3200:return:5", "-shotat", "100:/tmp/a.bmp"})
+	testing.expect_value(t, err, "")
+	testing.expect_value(t, len(opt.keys), 2)
+	testing.expect_value(t, opt.keys[0], Key_Event{frame = 3000, vk = '1', hold = 3})
+	testing.expect_value(t, opt.keys[1], Key_Event{frame = 3200, vk = 0x0D, hold = 5})
+	testing.expect_value(t, opt.shots[0].path, "/tmp/a.bmp")
+	delete(opt.keys)
+	delete(opt.shots)
+
+	_, err = parse_args({"-key", "10:nokey"})
+	testing.expect(t, err != "", "不明なキー名はエラー")
+	_, err = parse_args({"-key", "x:1"})
+	testing.expect(t, err != "", "フレームが数値でなければエラー")
+	testing.expect_value(t, vk_from_name("f10"), 0x79)
+	testing.expect_value(t, vk_from_name("a"), 'A')
+}

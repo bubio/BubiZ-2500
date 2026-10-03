@@ -2,6 +2,8 @@ package bubiz
 
 // ホストのキーコード(sokol_app)からWindows仮想キーコード(CSPが使う体系)への変換
 
+import "core:strings"
+
 import sapp "sokol:app"
 
 to_vk :: proc(k: sapp.Keycode) -> int {
@@ -54,6 +56,53 @@ to_vk :: proc(k: sapp.Keycode) -> int {
 	case .RIGHT_SHIFT: return 0xA1
 	case .RIGHT_CONTROL: return 0xA3
 	case .RIGHT_ALT: return 0xA5
+	}
+	return 0
+}
+
+// キー名からWindows仮想キーコードを得る(検証用オプション -key で使う)。不明なら0
+vk_from_name :: proc(name: string) -> int {
+	n := strings.to_upper(name, context.temp_allocator)
+	if len(n) == 1 {
+		c := n[0]
+		if (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') {
+			return int(c)
+		}
+	}
+	switch n {
+	case "RETURN", "ENTER": return 0x0D
+	case "SPACE": return 0x20
+	case "ESC", "ESCAPE": return 0x1B
+	case "TAB": return 0x09
+	case "BS", "BACKSPACE": return 0x08
+	case "DEL", "DELETE": return 0x2E
+	case "INS", "INSERT": return 0x2D
+	case "HOME": return 0x24
+	case "END": return 0x23
+	case "PGUP", "PAGEUP": return 0x21
+	case "PGDN", "PAGEDOWN": return 0x22
+	case "UP": return 0x26
+	case "DOWN": return 0x28
+	case "LEFT": return 0x25
+	case "RIGHT": return 0x27
+	case "SHIFT": return 0xA0
+	case "CTRL", "CONTROL": return 0xA2
+	case "ALT": return 0xA4
+	case "CAPS": return 0x14
+	case "KANA": return 0x15
+	}
+	// F1〜F12
+	if len(n) >= 2 && n[0] == 'F' {
+		v := 0
+		for c in n[1:] {
+			if c < '0' || c > '9' {
+				return 0
+			}
+			v = v * 10 + int(c - '0')
+		}
+		if v >= 1 && v <= 12 {
+			return 0x70 + v - 1
+		}
 	}
 	return 0
 }

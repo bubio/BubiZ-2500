@@ -100,10 +100,24 @@ resolve_path :: proc(base, path: string) -> string {
 }
 
 // ウィンドウ無しで指定フレーム数だけ実行する（CIでの動作確認用）
+// -key / -shotat で指定されたキー入力と画面保存をフレームに合わせて行う
 run_headless :: proc(opt: Options) {
-	for _ in 0 ..< opt.headless {
+	for frame in 0 ..< opt.headless {
+		for k in opt.keys {
+			if k.frame == frame {
+				key_down(i32(k.vk), false)
+			}
+			if k.frame + k.hold == frame {
+				key_up(i32(k.vk))
+			}
+		}
 		run()
 		draw_screen()
+		for s in opt.shots {
+			if s.frame == frame {
+				write_screenshot(strings.clone_to_cstring(s.path, context.temp_allocator))
+			}
+		}
 	}
 	w, h: i32
 	screen_size(&w, &h)

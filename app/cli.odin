@@ -22,6 +22,19 @@ Image_Arg :: struct {
 	kind: Image_Kind,
 }
 
+// ヘッドレス実行時に指定フレームで押すキー(検証用)
+Key_Event :: struct {
+	frame: int, // 押し始めるフレーム
+	vk:    int, // Windows仮想キーコード
+	hold:  int, // 押し続けるフレーム数
+}
+
+// ヘッドレス実行時に指定フレームで画面を保存する(検証用)
+Shot_Event :: struct {
+	frame: int,
+	path:  string,
+}
+
 Window_Size :: enum {
 	Full, // 標準(640x400)
 	Half,
@@ -37,6 +50,8 @@ Options :: struct {
 	save_config:   bool,
 	headless:      int, // >0ならウィンドウ無しでそのフレーム数だけ実行
 	screenshot:    string, // headless終了時に保存するBMP
+	keys:          [dynamic]Key_Event,
+	shots:         [dynamic]Shot_Event,
 	// ディレクトリ
 	rom_dir:       string,
 	disk_dir:      string,
@@ -102,6 +117,30 @@ image_kind_of :: proc(path: string) -> Image_Kind {
 		}
 	}
 	return .Floppy
+}
+
+// "<frame>:<key>[:<hold>]" を解釈する
+parse_key_event :: proc(s: string) -> (ev: Key_Event, err: string) {
+	parts := strings.split(s, ":", context.temp_allocator)
+	if len(parts) < 2 || len(parts) > 3 {
+		return ev, fmt.aprintf("オプション -key の書式は <frame>:<key>[:<hold>] です: %s", s)
+	}
+	frame, ok := strconv.parse_int(parts[0])
+	if !ok || frame < 0 {
+		return ev, fmt.aprintf("オプション -key のフレーム指定が不正です: %s", parts[0])
+	}
+	vk := vk_from_name(parts[1])
+	if vk == 0 {
+		return ev, fmt.aprintf("オプション -key のキー名が不明です: %s", parts[1])
+	}
+	hold := 3
+	if len(parts) == 3 {
+		hold, ok = strconv.parse_int(parts[2])
+		if !ok || hold < 1 {
+			return ev, fmt.aprintf("オプション -key の押下フレーム数が不正です: %s", parts[2])
+		}
+	}
+	return Key_Event{frame = frame, vk = vk, hold = hold}, ""
 }
 
 // 次の引数が値として存在するか確認して取り出す
@@ -322,6 +361,26 @@ parse_args :: proc(args: []string) -> (opt: Options, err: string) {
 			opt.resume_file = v
 		case "-headless":
 			opt.headless, msg = take_int(args, &i, name)
+		case "-key":
+			// -key <frame>:<key>[:<hold>]  例: -key 3000:1  -key 3200:RETURN:5
+			v, ok := take_value(args, &i, name)
+			if !ok {return opt, "オプション -key には値が必要です"}
+			ev, kerr := parse_key_event(v)
+			if kerr != "" {return opt, kerr}
+			append(&opt.keys, ev)
+		case "-shotat":
+			// -shotat <frame>:<file>  指定フレームで画面をBMP保存
+			v, ok := take_value(args, &i, name)
+			if !ok {return opt, "オプション -shotat には値が必要です"}
+			idx := strings.index_byte(v, ':')
+			frame, parsed := 0, false
+			if idx > 0 {
+				frame, parsed = strconv.parse_int(v[:idx])
+			}
+			if !parsed || frame < 0 || idx + 1 >= len(v) {
+				return opt, fmt.aprintf("オプション -shotat の書式は <frame>:<file> です: %s", v)
+			}
+			append(&opt.shots, Shot_Event{frame = frame, path = v[idx + 1:]})
 		case "-screenshot":
 			v, ok := take_value(args, &i, name)
 			if !ok {return opt, "オプション -screenshot には値が必要です"}
@@ -376,6 +435,10 @@ usage :: proc() {
 	fmt.println("  -resumefile <file>  起動時に指定ステートをロード")
 	fmt.println("  -headless <frames>  ウィンドウ無しで指定フレーム数実行して終了(検証用)")
 	fmt.println("  -screenshot <file>  -headless終了時の画面をBMPで保存")
+	fmt.println("  -key <frame>:<key>[:<hold>]  -headless中、指定フレームでキーを押す(複数指定可)")
+	fmt.println("                      key: 英数字1文字 / RETURN SPACE ESC TAB BS UP DOWN LEFT RIGHT F1-F12 SHIFT CTRL ...")
+	fmt.println("                      hold: 押し続けるフレーム数(既定3)")
+	fmt.println("  -shotat <frame>:<file>  -headless中、指定フレームの画面をBMPで保存(複数指定可)")
 }
 
 print_version :: proc() {
