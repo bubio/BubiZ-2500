@@ -38,7 +38,7 @@ class FILEIO;
 
 // ビットマップ（上から下へ並んだ32bit画素）
 typedef struct bitmap_s {
-	inline bool initialized()
+	inline bool initialized() const
 	{
 		return (!pixels.empty());
 	}
@@ -51,7 +51,7 @@ typedef struct bitmap_s {
 } bitmap_t;
 
 typedef struct font_s {
-	inline bool initialized()
+	inline bool initialized() const
 	{
 		return valid;
 	}
@@ -62,7 +62,7 @@ typedef struct font_s {
 } font_t;
 
 typedef struct pen_s {
-	inline bool initialized()
+	inline bool initialized() const
 	{
 		return valid;
 	}
