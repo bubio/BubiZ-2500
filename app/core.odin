@@ -10,8 +10,9 @@ when ODIN_OS == .Darwin {
 		"system:c++",
 	}
 } else when ODIN_OS == .Windows {
+	// 拡張子を付けないとlink.exeが.objとして探してしまう
 	foreign import core {
-		"system:bubiz_core",
+		"system:bubiz_core.lib",
 	}
 } else {
 	foreign import core {
