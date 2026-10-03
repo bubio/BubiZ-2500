@@ -25,8 +25,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: 依存パッケージ
         run: |
+          # Ubuntu 22.04標準のLLVMは古い(Odinは17以上が必要)ため、apt.llvm.orgから入れる
+          wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          chmod +x /tmp/llvm.sh
+          sudo /tmp/llvm.sh 18
           sudo apt-get update
-          sudo apt-get install -y cmake llvm-18-dev clang-18 libgl-dev libasound2-dev libx11-dev libxi-dev libxcursor-dev
+          sudo apt-get install -y cmake llvm-18-dev libgl-dev libasound2-dev libx11-dev libxi-dev libxcursor-dev
       - name: Odinをビルド
         run: |
           git clone --depth 1 https://github.com/odin-lang/Odin "$HOME/odin"
