@@ -16,7 +16,7 @@ case "$(uname -s)" in
     case "$M" in x86_64) ARCH=intel ;; arm64) ARCH=apple-silicon ;; *) ARCH="$M" ;; esac ;;
   MINGW*|MSYS*|CYGWIN*)
     PLATFORM=windows
-    case "$M" in x86_64|AMD64) ARCH=x86 ;; aarch64|arm64) ARCH=arm64 ;; *) ARCH="$M" ;; esac ;;
+    case "$M" in x86_64|AMD64) ARCH=x64 ;; aarch64|arm64) ARCH=arm64 ;; *) ARCH="$M" ;; esac ;;
   *) echo "未対応のOSです" >&2; exit 1 ;;
 esac
 echo "BubiZ-2500-${VERSION}-${PLATFORM}-${ARCH}"
