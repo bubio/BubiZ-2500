@@ -10,6 +10,9 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
+# Windows(MSVC): OdinはC標準ライブラリを静的(libcmt)でリンクするため、コアも静的ランタイム(/MT)に揃える
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
+
 set(CSP ${CMAKE_CURRENT_SOURCE_DIR}/csp)
 
 set(VM_DEVICES
