@@ -13,6 +13,17 @@ else
   echo "miseが見つかりません。https://mise.jdx.dev を参照してインストールしてください。" >&2
 fi
 
+# cmake: すでに入っているものを使う(バージョンは変えない)。無いときだけmiseで導入する
+if ! command -v cmake >/dev/null 2>&1; then
+  if command -v mise >/dev/null 2>&1; then
+    echo "cmakeが見つからないため、miseで導入します。"
+    mise use --global cmake@latest
+  else
+    echo "cmakeが見つかりません。インストールしてください。" >&2
+    exit 1
+  fi
+fi
+
 # sokol-odin: 固定リビジョンを取得してCライブラリをビルドする
 if [ ! -d "$DEST/.git" ]; then
   mkdir -p "$ROOT/.tools"

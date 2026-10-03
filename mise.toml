@@ -1,4 +1,4 @@
 [tools]
 # Odinコンパイラ。bindings(sokol-odin)の対応バージョンに合わせて更新する
+# (cmakeはここに含めない。無い場合だけscripts/setup.shが導入する)
 odin = "latest"
-cmake = "latest"
