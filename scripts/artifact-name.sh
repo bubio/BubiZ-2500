@@ -2,7 +2,7 @@
 # 配布物の基本名 BubiZ-2500-{version}-{platform}-{arch} を表示する(実行環境のOS/CPUから決める)
 #   platform: linux / macos / windows
 #   arch    : 各プラットフォームの慣例に従う
-#             linux=amd64,arm64 / macos=intel,apple-silicon / windows=x86,arm64
+#             linux=amd64,arm64 / macos=intel,apple-silicon / windows=x64,arm64
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION="$("$ROOT/scripts/version.sh")"
