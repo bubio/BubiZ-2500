@@ -18,3 +18,6 @@
 typedef intptr_t LONG_PTR;
 typedef uintptr_t ULONG_PTR;
 #endif
+#if defined(_WIN32) && defined(__cplusplus)
+#include <direct.h>
+#endif

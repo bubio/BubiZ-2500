@@ -38,7 +38,7 @@ else()
   target_include_directories(bubiz_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/compat)
   target_compile_options(bubiz_core PRIVATE
     -include ${CMAKE_CURRENT_SOURCE_DIR}/compat/bubiz_prelude.h
-    -w -fno-strict-aliasing)
+    -w -Wno-register -fno-strict-aliasing)
   if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(bubiz_core PRIVATE -fpermissive)
   endif()

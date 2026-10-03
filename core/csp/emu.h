@@ -30,7 +30,6 @@
 #include "vm/vm.h"
 
 #if defined(BUBIZ_HOST)
-#include <pthread.h>
 #define OSD_BUBIZ
 #elif defined(_USE_QT)
 #include <pthread.h>

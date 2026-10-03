@@ -24,7 +24,10 @@ git -C "$DEST" checkout --quiet "$SOKOL_ODIN_REV"
 cd "$DEST/sokol"
 case "$(uname -s)" in
   Linux)  sh build_clibs_linux.sh ;;
-  Darwin) sh build_clibs_macos.sh ;;
+  Darwin)
+    # arm64の最低配備ターゲットは11.0。スクリプト既定の10.13だとFoundationのヘッダが壊れるため置き換える
+    sed 's/MACOSX_DEPLOYMENT_TARGET=10.13/MACOSX_DEPLOYMENT_TARGET=11.0/' build_clibs_macos.sh | sh
+    ;;
   MINGW*|MSYS*|CYGWIN*) cmd //c build_clibs_windows.cmd ;;
   *) echo "このOSではscripts/setup.shは未対応です" >&2; exit 1 ;;
 esac
