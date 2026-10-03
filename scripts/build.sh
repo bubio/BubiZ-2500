@@ -12,7 +12,14 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MODE="${1:-release}"
 BUILD_DIR="${BUILD_DIR:-$ROOT/build}"
-ODIN="${ODIN:-odin}"
+# Odinの探し方: 環境変数ODIN > scripts/build-odin.shで作った .tools/odin/odin > PATH上のodin
+if [ -z "${ODIN:-}" ]; then
+  if [ -x "$ROOT/.tools/odin/odin" ]; then
+    ODIN="$ROOT/.tools/odin/odin"
+  else
+    ODIN=odin
+  fi
+fi
 SOKOL_DIR="${SOKOL_DIR:-$ROOT/.tools/sokol-odin/sokol}"
 
 case "$(uname -s)" in
@@ -22,7 +29,13 @@ case "$(uname -s)" in
 esac
 
 if ! command -v "$ODIN" >/dev/null 2>&1; then
-  echo "odinが見つかりません。scripts/setup.shを実行するかODINを指定してください。" >&2
+  echo "odinが見つかりません。scripts/setup.shを実行するか、scripts/build-odin.shでソースからビルドするか、ODINを指定してください。" >&2
+  exit 1
+fi
+# 配布バイナリがOSに合わず起動できない場合(例: macOS 13)は、ソースからのビルドを案内する
+if ! "$ODIN" version >/dev/null 2>&1; then
+  echo "odin($ODIN)を実行できません。お使いのOSに合わない可能性があります。" >&2
+  echo "scripts/build-odin.sh で、固定バージョンをソースからビルドしてください(LLVM 17以上が必要)。" >&2
   exit 1
 fi
 if [ ! -d "$SOKOL_DIR" ]; then

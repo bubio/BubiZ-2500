@@ -13,6 +13,12 @@ else
   echo "miseが見つかりません。https://mise.jdx.dev を参照してインストールしてください。" >&2
 fi
 
+# 配布されたOdinがOSに合わず動かない場合は、ソースからのビルドを案内する
+if command -v odin >/dev/null 2>&1 && ! odin version >/dev/null 2>&1; then
+  echo "注意: 導入されたodinがこのOSでは動きません(macOS 13などで起こります)。" >&2
+  echo "      scripts/build-odin.sh で固定バージョンをソースからビルドしてください(LLVM 17以上が必要)。" >&2
+fi
+
 # cmake: すでに入っているものを使う(バージョンは変えない)。無いときだけmiseで導入する
 if ! command -v cmake >/dev/null 2>&1; then
   if command -v mise >/dev/null 2>&1; then
