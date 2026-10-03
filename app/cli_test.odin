@@ -94,6 +94,13 @@ test_filter_option :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_snapdir :: proc(t: ^testing.T) {
+	opt, msg := parse_args({"-snapdir", "/tmp/x"})
+	testing.expect_value(t, msg, "")
+	testing.expect_value(t, opt.snap_dir, "/tmp/x")
+}
+
+@(test)
 test_aspect :: proc(t: ^testing.T) {
 	opt, msg := parse_args({"-aspect", "480"})
 	testing.expect_value(t, msg, "")

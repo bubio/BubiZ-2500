@@ -381,6 +381,8 @@ int OSD::draw_screen()
 	return 1;
 }
 
+std::string g_snap_dir;
+
 void OSD::capture_screen()
 {
 	// 日時付きファイル名でBMP保存
@@ -388,7 +390,12 @@ void OSD::capture_screen()
 	struct tm *lt = localtime(&t);
 	_TCHAR name[_MAX_PATH];
 	my_stprintf_s(name, _MAX_PATH, _T("%04d-%02d-%02d_%02d-%02d-%02d.bmp"), lt->tm_year + 1900, lt->tm_mon + 1, lt->tm_mday, lt->tm_hour, lt->tm_min, lt->tm_sec);
-	write_bitmap_to_file(&vm_screen_buffer, create_local_path(name));
+	if(!g_snap_dir.empty()) {
+		std::string path = g_snap_dir + (char)'/' + name;
+		write_bitmap_to_file(&vm_screen_buffer, path.c_str());
+	} else {
+		write_bitmap_to_file(&vm_screen_buffer, create_local_path(name));
+	}
 }
 
 void OSD::write_bitmap_to_file(bitmap_t *bitmap, const _TCHAR *file_path)

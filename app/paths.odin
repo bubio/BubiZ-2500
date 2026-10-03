@@ -33,6 +33,36 @@ default_data_dir :: proc() -> string {
 	return strings.clone(".")
 }
 
+// スクリーンショットの既定の保存先(OS標準のピクチャフォルダ配下のBubiZ-2500)
+default_snap_dir :: proc() -> string {
+	when ODIN_OS == .Windows {
+		base := os.get_env("USERPROFILE", context.temp_allocator)
+		if base != "" {
+			return fmt.aprintf("%s\\Pictures\\%s", base, APP_DIR_NAME)
+		}
+	} else {
+		home := os.get_env("HOME", context.temp_allocator)
+		if home != "" {
+			pictures := fmt.tprintf("%s/Pictures", home)
+			when ODIN_OS != .Darwin {
+				// XDGのユーザーディレクトリ設定があれば従う
+				cfg := os.get_env("XDG_CONFIG_HOME", context.temp_allocator)
+				if cfg == "" {cfg = fmt.tprintf("%s/.config", home)}
+				if data, err := os.read_entire_file(fmt.tprintf("%s/user-dirs.dirs", cfg), context.temp_allocator); err == nil {
+					for line in strings.split_lines(string(data), context.temp_allocator) {
+						if strings.has_prefix(line, "XDG_PICTURES_DIR=") {
+							v := strings.trim(line[len("XDG_PICTURES_DIR="):], "\"")
+							pictures, _ = strings.replace_all(v, "$HOME", home, context.temp_allocator)
+						}
+					}
+				}
+			}
+			return fmt.aprintf("%s/%s", pictures, APP_DIR_NAME)
+		}
+	}
+	return strings.clone(".")
+}
+
 // ディレクトリを(親も含めて)作成する
 ensure_dir :: proc(path: string) -> bool {
 	if os.exists(path) {

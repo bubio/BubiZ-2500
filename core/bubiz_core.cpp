@@ -101,6 +101,14 @@ void bubiz_set_data_dir(const char *dir)
 	cpp_homedir = d;
 }
 
+void bubiz_set_snap_dir(const char *dir)
+{
+	g_snap_dir = dir ? dir : "";
+	while(!g_snap_dir.empty() && (g_snap_dir.back() == '/' || g_snap_dir.back() == '\\')) {
+		g_snap_dir.pop_back();
+	}
+}
+
 void bubiz_load_config(const char *name)
 {
 	// 設定ファイルが無ければ既定値で初期化される

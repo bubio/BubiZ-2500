@@ -26,6 +26,7 @@ when ODIN_OS == .Darwin {
 @(default_calling_convention = "c", link_prefix = "bubiz_")
 foreign core {
 	set_data_dir :: proc(dir: cstring) ---
+	set_snap_dir :: proc(dir: cstring) ---
 	load_config :: proc(name: cstring) ---
 	save_config :: proc(name: cstring) ---
 	set_config :: proc(key: cstring, value: c.int) -> bool ---

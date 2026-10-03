@@ -371,6 +371,7 @@ handle_hotkey :: proc(e: ^sapp.Event) -> bool {
 		}
 	case .S:
 		if ctrl {
+			ensure_dir(fe.opt.snap_dir if fe.opt.snap_dir != "" else default_snap_dir())
 			capture_screen()
 			return true
 		}

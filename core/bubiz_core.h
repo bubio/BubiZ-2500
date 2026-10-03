@@ -18,6 +18,8 @@ extern "C" {
 // データディレクトリ(設定ファイル・BIOS ROM・ステートの置き場)を設定する。末尾の区切り文字は自動補完。
 // bubiz_create より前に呼ぶこと。
 void bubiz_set_data_dir(const char *dir);
+// スクリーンショットの保存先(空ならデータディレクトリ)
+void bubiz_set_snap_dir(const char *dir);
 
 // 設定ファイル(データディレクトリ内の相対名)を読む。無ければ既定値。bubiz_createより前に呼べる。
 void bubiz_load_config(const char *name);

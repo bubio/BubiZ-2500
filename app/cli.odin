@@ -462,7 +462,7 @@ usage :: proc() {
 	fmt.println("  -romdir <path>      BIOS ROM・設定・ステートのディレクトリ")
 	fmt.println("  -diskdir <path>     ディスクイメージのディレクトリ")
 	fmt.println("  -tapedir <path>     テープイメージのディレクトリ")
-	fmt.println("  -snapdir <path>     スナップショット保存先")
+	fmt.println("  -snapdir <path>     スクリーンショットの保存先(既定: ピクチャ/BubiZ-2500)")
 	fmt.println("  -statedir <path>    ステート保存先")
 	fmt.println("  -noconfig           設定ファイルを読み込まない")
 	fmt.println("  -saveconfig         終了時に設定ファイルを更新する")

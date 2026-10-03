@@ -27,6 +27,8 @@ main :: proc() {
 		fmt.printfln("データディレクトリ: %s", display_path(data_dir))
 	}
 	set_data_dir(strings.clone_to_cstring(data_dir))
+	snap_dir := opt.snap_dir if opt.snap_dir != "" else default_snap_dir()
+	set_snap_dir(strings.clone_to_cstring(snap_dir))
 
 	// 設定の読み込みとオプションによる上書き
 	if !opt.no_config {

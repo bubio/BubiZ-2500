@@ -71,6 +71,9 @@ typedef struct pen_s {
 	bool valid;
 } pen_t;
 
+// スクリーンショットの保存先ディレクトリ(空ならデータディレクトリ)
+extern std::string g_snap_dir;
+
 class OSD
 {
 private:
