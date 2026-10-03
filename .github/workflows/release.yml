@@ -1,0 +1,61 @@
+name: Release
+
+# バージョンタグ(例: v0.1.0)をpushすると、各OSの配布物を作ってGitHubのリリースに公開する。
+# タグ名は app/version.odin の VERSION と一致している必要がある。
+# タグ名に「-」を含むもの(例: v0.2.0-rc.1)はプレリリースとして公開する。
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+*"
+
+permissions:
+  contents: read
+
+jobs:
+  check-version:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: タグとバージョンの一致を確認
+        run: |
+          version="$(scripts/version.sh)"
+          tag="${GITHUB_REF_NAME#v}"
+          # プレリリースの接尾辞(-rc.1など)を除いた部分が一致すればよい
+          if [ "${tag%%-*}" != "${version}" ]; then
+            echo "タグ ${GITHUB_REF_NAME} が app/version.odin のVERSION(${version})と一致しません" >&2
+            exit 1
+          fi
+
+  linux:
+    needs: check-version
+    uses: ./.github/workflows/release-linux.yml
+
+  macos:
+    needs: check-version
+    uses: ./.github/workflows/release-macos.yml
+
+  windows:
+    needs: check-version
+    uses: ./.github/workflows/release-windows.yml
+
+  publish:
+    needs: [linux, macos, windows]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: dist-*
+          merge-multiple: true
+      - name: チェックサム
+        run: |
+          cd dist
+          sha256sum * > SHA256SUMS.txt
+          ls -l
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}

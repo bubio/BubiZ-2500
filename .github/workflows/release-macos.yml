@@ -1,0 +1,35 @@
+name: Release (macOS)
+
+# release.yml から呼ばれる。単体でも手動実行できる(配布物をartifactとして得るだけで公開はしない)
+on:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        # macos-14: Apple Silicon / macos-15-intel: Intel
+        os: [macos-14, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: laytan/setup-odin@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: セットアップ
+        run: scripts/setup.sh
+      - name: ビルド
+        run: scripts/build.sh release
+      - name: 動作確認
+        run: build/bin/bubiz -headless 60 -nosound
+      - name: 配布物の作成(dmg)
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: scripts/package-macos.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-macos-${{ matrix.os }}
+          path: dist/*
+          if-no-files-found: error

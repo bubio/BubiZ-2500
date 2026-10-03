@@ -8,6 +8,7 @@ on:
       - "core/**"
       - "app/**"
       - "scripts/**"
+      - "packaging/**"
       - "mise.toml"
       - ".github/workflows/ci-windows.yml"
   pull_request:
@@ -15,6 +16,7 @@ on:
       - "core/**"
       - "app/**"
       - "scripts/**"
+      - "packaging/**"
       - "mise.toml"
       - ".github/workflows/ci-windows.yml"
 
@@ -41,3 +43,5 @@ jobs:
         run: build/bin/bubiz.exe -headless 60 -nosound
       - name: コアの煙テスト
         run: build/core/bubiz_smoke.exe "$RUNNER_TEMP/"
+      - name: 配布物の作成(zip)
+        run: scripts/package-windows.sh
