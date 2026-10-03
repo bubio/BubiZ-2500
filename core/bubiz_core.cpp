@@ -57,6 +57,7 @@ static std::mutex g_frame_mutex;
 static std::vector<uint8_t> g_frame_rgba;
 static int g_frame_w = 0, g_frame_h = 0;
 static uint64_t g_frame_seq = 0;
+static bool g_frame_skip_line = false;
 
 // OSDの画面バッファをRGBA8へ変換して公開する
 static void publish_frame()
@@ -71,6 +72,9 @@ static void publish_frame()
 	std::lock_guard<std::mutex> lock(g_frame_mutex);
 	g_frame_w = b->width;
 	g_frame_h = b->height;
+#ifdef USE_SCREEN_FILTER
+	g_frame_skip_line = g_emu->get_osd()->screen_skip_line;
+#endif
 	size_t n = (size_t)b->width * b->height;
 	g_frame_rgba.resize(n * 4);
 	uint8_t *out = g_frame_rgba.data();
@@ -224,6 +228,12 @@ bool bubiz_copy_frame(uint8_t *out_pixels, int width, int height, uint64_t *seq)
 		*seq = g_frame_seq;
 	}
 	return true;
+}
+
+bool bubiz_frame_skip_line(void)
+{
+	std::lock_guard<std::mutex> lock(g_frame_mutex);
+	return g_frame_skip_line;
 }
 
 void bubiz_read_screen_rgba(uint8_t *out_pixels)

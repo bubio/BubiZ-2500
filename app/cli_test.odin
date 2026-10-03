@@ -81,3 +81,14 @@ test_debug_and_state_options :: proc(t: ^testing.T) {
 	opt2, _ := parse_args({})
 	testing.expect_value(t, opt2.joystick, false)
 }
+
+@(test)
+test_filter_option :: proc(t: ^testing.T) {
+	opt, err := parse_args({"-filter", "RGB"})
+	testing.expect_value(t, err, "")
+	testing.expect_value(t, opt.filter, Screen_Filter.RGB)
+	_, err = parse_args({"-filter", "rf"})
+	testing.expect(t, err != "", "未対応のフィルタ名はエラー")
+	opt2, _ := parse_args({})
+	testing.expect_value(t, opt2.filter, Screen_Filter.None)
+}

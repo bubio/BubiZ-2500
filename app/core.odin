@@ -40,6 +40,7 @@ foreign core {
 	screen_size :: proc(width, height: ^c.int) ---
 	screen_aspect :: proc(width, height: ^c.int) ---
 	read_screen_rgba :: proc(out_pixels: [^]u8) ---
+	frame_skip_line :: proc() -> bool ---
 	copy_frame :: proc(out_pixels: [^]u8, width, height: c.int, seq: ^u64) -> bool ---
 
 	sound_rate :: proc() -> c.int ---

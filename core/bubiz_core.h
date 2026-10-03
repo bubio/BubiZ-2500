@@ -42,6 +42,8 @@ const char *bubiz_device_name(void);
 // 画面: bubiz_run() が描画した最新のフレームを、RGBA8(メモリ上R,G,B,Aの順)で取り出す。
 // bubiz_copy_frame() はどのスレッドからでも呼べる。幅・高さが現在の画面と違えばfalseを返す。
 bool bubiz_copy_frame(uint8_t *out_pixels, int width, int height, uint64_t *seq);
+// 最新のフレームが、200ライン表示(1行おきに有効)のものかどうか。画面フィルタが走査線の扱いを変えるのに使う
+bool bubiz_frame_skip_line(void);
 // 互換用(何もしない)。描画は bubiz_run() の中で行われる
 void bubiz_draw_screen(void);
 void bubiz_screen_size(int *width, int *height);

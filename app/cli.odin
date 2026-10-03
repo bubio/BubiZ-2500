@@ -91,6 +91,7 @@ Options :: struct {
 	joystick:      bool,
 	show_fps:      bool,
 	debug:         bool, // 起動時にデバッガーを開く
+	filter:        Screen_Filter, // 画面フィルタ
 	interp:        bool, // 拡大時に補間する(既定は最近傍)
 	resume:        bool,
 	resume_file:   string,
@@ -360,6 +361,14 @@ parse_args :: proc(args: []string) -> (opt: Options, err: string) {
 			opt.joystick = false
 		case "-debug", "-monitor_mode":
 			opt.debug = true
+		case "-filter":
+			v, ok := take_value(args, &i, name)
+			if !ok {return opt, "オプション -filter には値が必要です"}
+			switch strings.to_lower(v, context.temp_allocator) {
+			case "none": opt.filter = .None
+			case "rgb": opt.filter = .RGB
+			case: return opt, fmt.aprintf("オプション -filter の値は none か rgb です: %s", v)
+			}
 		case "-interp":
 			opt.interp = true
 		case "-nointerp":
@@ -465,6 +474,7 @@ usage :: proc() {
 	fmt.println("  -samplefreq <hz>    サンプリング周波数")
 	fmt.println("  -mouse | -nomouse   マウスのエミュレート")
 	fmt.println("  -joystick | -nojoystick   キーボードによるジョイスティックで起動する / しない(既定: しない)")
+	fmt.println("  -filter <none|rgb>        画面フィルタ(rgb: CRTのRGBサブピクセル表示。既定: none)")
 	fmt.println("  -interp | -nointerp       画面の拡大時に補間する / しない(既定: しない)")
 	fmt.println("  -show_fps | -hide_fps     ウィンドウタイトルにFPS(エミュレーション速度)を表示")
 	fmt.println("  -debug              起動時にデバッガーを開く(端末の標準入出力を使う。'?'でコマンド一覧)")
@@ -478,6 +488,7 @@ usage :: proc() {
 	fmt.println("    Ctrl+S       スクリーンショットを保存(データディレクトリへBMP)")
 	fmt.println("    Ctrl+F1〜F4        ステートを保存(スロット1〜4)")
 	fmt.println("    Ctrl+Shift+F1〜F4  ステートを復元(スロット1〜4)")
+	fmt.println("    Ctrl+F       画面フィルタ(RGB)の切り替え")
 	fmt.println("    Ctrl+J       キーボードによるジョイスティックの切り替え(矢印キー=方向, Z=ボタン1, X=ボタン2)")
 	fmt.println("    Ctrl+D       デバッガーを開く(端末の標準入出力を使う)")
 	fmt.println("    Ctrl+M       マウスのキャプチャ切り替え(-mouse指定時は最初のクリックでも開始)")

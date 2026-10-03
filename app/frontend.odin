@@ -23,7 +23,11 @@ Frontend :: struct {
 	// 描画
 	image:      sg.Image,
 	view:       sg.View,
-	sampler:    sg.Sampler,
+	sampler:    sg.Sampler, // 最近傍
+	sampler_linear: sg.Sampler, // 線形補間
+	src:        []u8, // コアから受け取った生のフレーム(RGBA8)
+	filter:     Screen_Filter,
+	filter_scale: int, // 現在のフィルタの倍率(1〜3)
 	tex_w:      i32,
 	tex_h:      i32,
 	pixels:     []u8,
@@ -90,8 +94,9 @@ init :: proc "c" () {
 	sg.setup({environment = sglue.environment(), logger = {func = slog.func}})
 	sgl.setup({logger = {func = slog.func}})
 
-	filter: sg.Filter = .LINEAR if fe.opt.interp else .NEAREST
-	fe.sampler = sg.make_sampler({min_filter = filter, mag_filter = filter, wrap_u = .CLAMP_TO_EDGE, wrap_v = .CLAMP_TO_EDGE})
+	fe.sampler = sg.make_sampler({min_filter = .NEAREST, mag_filter = .NEAREST, wrap_u = .CLAMP_TO_EDGE, wrap_v = .CLAMP_TO_EDGE})
+	fe.sampler_linear = sg.make_sampler({min_filter = .LINEAR, mag_filter = .LINEAR, wrap_u = .CLAMP_TO_EDGE, wrap_v = .CLAMP_TO_EDGE})
+	fe.filter = fe.opt.filter
 	if fe.opt.mouse {
 		enable_mouse(true)
 	}
@@ -144,9 +149,9 @@ audio_stream :: proc "c" (buf: ^f32, num_frames, num_channels: i32) {
 
 // コアの画面サイズに合わせてテクスチャを作り直す
 @(private = "file")
-ensure_texture :: proc(w, h: i32) {
+ensure_texture :: proc(w, h: i32) -> (recreated: bool) {
 	if fe.tex_w == w && fe.tex_h == h {
-		return
+		return false
 	}
 	if fe.tex_w != 0 {
 		sg.destroy_view(fe.view)
@@ -157,6 +162,7 @@ ensure_texture :: proc(w, h: i32) {
 	fe.pixels = make([]u8, int(w * h * 4))
 	fe.image = sg.make_image({width = w, height = h, pixel_format = .RGBA8, usage = {dynamic_update = true}})
 	fe.view = sg.make_view({texture = {image = fe.image}})
+	return true
 }
 
 @(private = "file")
@@ -174,14 +180,37 @@ frame :: proc "c" () {
 		fe.mouse_dx, fe.mouse_dy = 0, 0
 	}
 
-	// エミュレーションスレッドが公開した最新のフレームを取り込む
+	// エミュレーションスレッドが公開した最新のフレームを取り込む(画面フィルタがあればここで掛ける)
 	w, h: i32
 	screen_size(&w, &h)
 	if w > 0 && h > 0 {
-		ensure_texture(w, h)
+		tw, th := w, h
+		if fe.filter == .RGB {
+			// 表示の大きさに合わせて倍率を選ぶ(元の実装と同じ考え方)。倍率が変わったら作り直す
+			_, _, qw, _ := quad_rect()
+			scale := filter_scale_for(qw / f32(w))
+			if scale != fe.filter_scale {
+				fe.filter_scale = scale
+				fe.last_seq = 0
+			}
+			tw, th = w * i32(scale), h * i32(scale)
+		}
+		if len(fe.src) != int(w * h * 4) {
+			delete(fe.src)
+			fe.src = make([]u8, int(w * h * 4))
+			fe.last_seq = 0
+		}
+		if ensure_texture(tw, th) {
+			fe.last_seq = 0
+		}
 		seq: u64
-		if copy_frame(raw_data(fe.pixels), w, h, &seq) && seq != fe.last_seq {
+		if copy_frame(raw_data(fe.src), w, h, &seq) && seq != fe.last_seq {
 			fe.last_seq = seq
+			if fe.filter == .RGB {
+				apply_rgb_filter(fe.src, int(w), int(h), frame_skip_line(), fe.filter_scale, fe.pixels)
+			} else {
+				copy(fe.pixels, fe.src)
+			}
 			sg.update_image(fe.image, {mip_levels = {0 = {ptr = raw_data(fe.pixels), size = uint(len(fe.pixels))}}})
 		}
 	}
@@ -213,28 +242,38 @@ frame :: proc "c" () {
 	free_all(context.temp_allocator)
 }
 
+// アスペクト比を保ってウィンドウ内に収めたときの、描画する矩形(x, y, 幅, 高さ)
+@(private = "file")
+quad_rect :: proc() -> (x0, y0, qw, qh: f32) {
+	aw, ah: i32
+	screen_aspect(&aw, &ah)
+	if aw <= 0 || ah <= 0 {
+		aw, ah = fe.tex_w, fe.tex_h
+	}
+	if aw <= 0 || ah <= 0 {
+		return 0, 0, 0, 0
+	}
+	ww, wh := f32(sapp.width()), f32(sapp.height())
+	scale := min(ww / f32(aw), wh / f32(ah))
+	qw, qh = f32(aw) * scale, f32(ah) * scale
+	return (ww - qw) * 0.5, (wh - qh) * 0.5, qw, qh
+}
+
 // アスペクト比を保ってウィンドウ内に描く
 @(private = "file")
 draw_quad :: proc() {
 	if fe.tex_w == 0 {
 		return
 	}
-	aw, ah: i32
-	screen_aspect(&aw, &ah)
-	if aw <= 0 || ah <= 0 {
-		aw, ah = fe.tex_w, fe.tex_h
-	}
+	x0, y0, qw, qh := quad_rect()
 	ww, wh := f32(sapp.width()), f32(sapp.height())
-	scale := min(ww / f32(aw), wh / f32(ah))
-	qw, qh := f32(aw) * scale, f32(ah) * scale
-	x0, y0 := (ww - qw) * 0.5, (wh - qh) * 0.5
 
 	sgl.defaults()
 	sgl.viewport(0, 0, sapp.width(), sapp.height(), true)
 	sgl.matrix_mode_projection()
 	sgl.ortho(0, ww, wh, 0, -1, 1)
 	sgl.enable_texture()
-	sgl.texture(fe.view, fe.sampler)
+	sgl.texture(fe.view, fe.sampler_linear if (fe.opt.interp || fe.filter != .None) else fe.sampler)
 	sgl.begin_quads()
 	sgl.c3f(1, 1, 1)
 	sgl.v2f_t2f(x0, y0, 0, 0)
@@ -332,6 +371,12 @@ handle_hotkey :: proc(e: ^sapp.Event) -> bool {
 	case .M:
 		if ctrl {
 			set_mouse_grab(!fe.mouse_grab)
+			return true
+		}
+	case .F:
+		if ctrl {
+			fe.filter = .None if fe.filter == .RGB else .RGB
+			fe.last_seq = 0
 			return true
 		}
 	case .D:
