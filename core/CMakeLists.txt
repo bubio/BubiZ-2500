@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
-# macOSの最低対応バージョン(13以上)。指定しないとビルドしたマシンのOSが最低バージョンになってしまう
+# macOSの最低対応バージョン(14以上)。指定しないとビルドしたマシンのOSが最低バージョンになってしまう
 if(APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
-  set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "macOSの最低対応バージョン")
+  set(CMAKE_OSX_DEPLOYMENT_TARGET "14.0" CACHE STRING "macOSの最低対応バージョン")
 endif()
 
 project(bubiz_core CXX)

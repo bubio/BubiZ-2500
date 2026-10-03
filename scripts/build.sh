@@ -32,7 +32,7 @@ if ! command -v "$ODIN" >/dev/null 2>&1; then
   echo "odinが見つかりません。scripts/setup.shを実行するか、scripts/build-odin.shでソースからビルドするか、ODINを指定してください。" >&2
   exit 1
 fi
-# 配布バイナリがOSに合わず起動できない場合(例: macOS 13)は、ソースからのビルドを案内する
+# 配布バイナリがOSに合わず起動できない場合(例: macOS 14未満)は、ソースからのビルドを案内する
 if ! "$ODIN" version >/dev/null 2>&1; then
   echo "odin($ODIN)を実行できません。お使いのOSに合わない可能性があります。" >&2
   echo "scripts/build-odin.sh で、固定バージョンをソースからビルドしてください(LLVM 17以上が必要)。" >&2
@@ -56,8 +56,8 @@ cmake --build "$BUILD_DIR/core" --parallel
 # 2. アプリケーション層 (Odin)
 if [ "$MODE" = "debug" ]; then ODIN_FLAGS=(-debug); else ODIN_FLAGS=(-o:speed); fi
 if [ "$(uname -s)" = "Darwin" ]; then
-  # macOSは13以上が対象(Odinの既定は11.0)
-  ODIN_FLAGS+=(-minimum-os-version:13.0.0)
+  # macOSは14以上が対象(Odinの既定は11.0)
+  ODIN_FLAGS+=(-minimum-os-version:14.0.0)
 fi
 if [ "$WINDOWS" = 1 ]; then
   LINK_FLAGS="/LIBPATH:$(cygpath -w "$BUILD_DIR/core")"

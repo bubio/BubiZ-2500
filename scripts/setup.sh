@@ -15,7 +15,7 @@ fi
 
 # 配布されたOdinがOSに合わず動かない場合は、ソースからのビルドを案内する
 if command -v odin >/dev/null 2>&1 && ! odin version >/dev/null 2>&1; then
-  echo "注意: 導入されたodinがこのOSでは動きません(macOS 13などで起こります)。" >&2
+  echo "注意: 導入されたodinがこのOSでは動きません(macOS 13以前などで起こります)。" >&2
   echo "      scripts/build-odin.sh で固定バージョンをソースからビルドしてください(LLVM 17以上が必要)。" >&2
 fi
 
@@ -42,14 +42,9 @@ cd "$DEST/sokol"
 case "$(uname -s)" in
   Linux)  sh build_clibs_linux.sh ;;
   Darwin)
-    # sokol_appはCADisplayLink(macOS 14以上)を使うため、13向けにNSTimer代用のパッチを当てる(適用済みなら何もしない)
-    PATCH="$ROOT/scripts/patches/sokol-macos13-displaylink.patch"
-    if git -C "$DEST" apply --check "$PATCH" 2>/dev/null; then
-      git -C "$DEST" apply "$PATCH"
-    fi
-    # macOSは13以上が対象。スクリプト既定の配備ターゲット(10.13)を13.0に置き換える。
+    # macOSは14以上が対象。スクリプト既定の配備ターゲット(10.13)を14.0に置き換える。
     # PATH上にApple純正でないclang(Homebrewなど)があるとFoundationのヘッダを解釈できないため、純正を明示する
-    sed 's#MACOSX_DEPLOYMENT_TARGET=10.13 clang#MACOSX_DEPLOYMENT_TARGET=13.0 /usr/bin/clang#' build_clibs_macos.sh | sh
+    sed 's#MACOSX_DEPLOYMENT_TARGET=10.13 clang#MACOSX_DEPLOYMENT_TARGET=14.0 /usr/bin/clang#' build_clibs_macos.sh | sh
     ;;
   MINGW*|MSYS*|CYGWIN*) cmd //c build_clibs_windows.cmd ;;
   *) echo "このOSではscripts/setup.shは未対応です" >&2; exit 1 ;;

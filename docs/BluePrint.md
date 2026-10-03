@@ -18,7 +18,7 @@ MZ-2500エミュレーターの開発です。
 #### サポートするOSバージョンと優先順位
 
 1. Linux: Ubuntu 22.04以上 / amd64 / arm64
-2. macOS: macOS 13以上 / Intel / Apple Silicon
+2. macOS: macOS 14以上 / Intel / Apple Silicon
 3. Windows: Windows 11以上 / x86_64
 
 Linuxでの開発が完了したのちに、他プラットフォームへ広げていきます。

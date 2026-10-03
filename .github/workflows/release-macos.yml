@@ -26,7 +26,7 @@ jobs:
         run: scripts/setup.sh
       - name: ビルド
         run: scripts/build.sh release
-      - name: 最低対応OS(13.0)の確認
+      - name: 最低対応OS(14.0)の確認
         run: scripts/check-macos-min-version.sh
       - name: 動作確認
         run: build/bin/bubiz -headless 60 -nosound
