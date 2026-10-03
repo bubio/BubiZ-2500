@@ -50,6 +50,7 @@ Options :: struct {
 	save_config:   bool,
 	headless:      int, // >0ならウィンドウ無しでそのフレーム数だけ実行
 	screenshot:    string, // headless終了時に保存するBMP
+	wav:           string, // headless中の音声を録音するWAV
 	keys:          [dynamic]Key_Event,
 	shots:         [dynamic]Shot_Event,
 	// ディレクトリ
@@ -361,6 +362,10 @@ parse_args :: proc(args: []string) -> (opt: Options, err: string) {
 			opt.resume_file = v
 		case "-headless":
 			opt.headless, msg = take_int(args, &i, name)
+		case "-wav":
+			v, ok := take_value(args, &i, name)
+			if !ok {return opt, "オプション -wav には値が必要です"}
+			opt.wav = v
 		case "-key":
 			// -key <frame>:<key>[:<hold>]  例: -key 3000:1  -key 3200:RETURN:5
 			v, ok := take_value(args, &i, name)
@@ -438,6 +443,7 @@ usage :: proc() {
 	fmt.println("  -key <frame>:<key>[:<hold>]  -headless中、指定フレームでキーを押す(複数指定可)")
 	fmt.println("                      key: 英数字1文字 / RETURN SPACE ESC TAB BS UP DOWN LEFT RIGHT F1-F12 SHIFT CTRL ...")
 	fmt.println("                      hold: 押し続けるフレーム数(既定3)")
+	fmt.println("  -wav <file>         -headless中の音声をWAVで録音(-nosoundと併用不可)")
 	fmt.println("  -shotat <frame>:<file>  -headless中、指定フレームの画面をBMPで保存(複数指定可)")
 }
 

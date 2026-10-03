@@ -102,6 +102,19 @@ resolve_path :: proc(base, path: string) -> string {
 // ウィンドウ無しで指定フレーム数だけ実行する（CIでの動作確認用）
 // -key / -shotat で指定されたキー入力と画面保存をフレームに合わせて行う
 run_headless :: proc(opt: Options) {
+	recording := false
+	if opt.wav != "" {
+		recording = start_record_sound_to(strings.clone_to_cstring(opt.wav, context.temp_allocator))
+		if !recording {
+			fmt.eprintfln("bubiz: WAV録音を開始できません: %s", opt.wav)
+		}
+	}
+	// 録音時はウィンドウ版の音声スレッド相当として、1フレーム分の音を取り出し続ける
+	pull_buf := make([]i16, 8192 * 2)
+	defer delete(pull_buf)
+	pull_acc := 0.0
+	rate := f64(sound_rate())
+
 	for frame in 0 ..< opt.headless {
 		for k in opt.keys {
 			if k.frame == frame {
@@ -113,11 +126,24 @@ run_headless :: proc(opt: Options) {
 		}
 		run()
 		draw_screen()
+		if recording {
+			pull_acc += rate / frame_rate()
+			n := int(pull_acc)
+			pull_acc -= f64(n)
+			for n > 0 {
+				c := min(n, 8192)
+				pull_sound(&pull_buf[0], uint(c))
+				n -= c
+			}
+		}
 		for s in opt.shots {
 			if s.frame == frame {
 				write_screenshot(strings.clone_to_cstring(s.path, context.temp_allocator))
 			}
 		}
+	}
+	if recording {
+		stop_record_sound()
 	}
 	w, h: i32
 	screen_size(&w, &h)

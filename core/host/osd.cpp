@@ -472,14 +472,21 @@ void OSD::stop_sound()
 	sound_ring_r = sound_ring_w = sound_ring_fill = 0;
 }
 
-void OSD::start_record_sound()
+void OSD::start_record_sound(const _TCHAR* path)
 {
 	if(!now_record_sound) {
-		time_t t = time(NULL);
-		struct tm *lt = localtime(&t);
-		my_stprintf_s(sound_file_path, _MAX_PATH, _T("%04d-%02d-%02d_%02d-%02d-%02d.wav"), lt->tm_year + 1900, lt->tm_mon + 1, lt->tm_mday, lt->tm_hour, lt->tm_min, lt->tm_sec);
+		_TCHAR full_path[_MAX_PATH];
+		if(path != NULL && path[0] != _T('\0')) {
+			my_tcscpy_s(sound_file_path, _MAX_PATH, path);
+			my_tcscpy_s(full_path, _MAX_PATH, path);
+		} else {
+			time_t t = time(NULL);
+			struct tm *lt = localtime(&t);
+			my_stprintf_s(sound_file_path, _MAX_PATH, _T("%04d-%02d-%02d_%02d-%02d-%02d.wav"), lt->tm_year + 1900, lt->tm_mon + 1, lt->tm_mday, lt->tm_hour, lt->tm_min, lt->tm_sec);
+			my_tcscpy_s(full_path, _MAX_PATH, create_local_path(sound_file_path));
+		}
 		rec_sound_fio = new FILEIO();
-		if(rec_sound_fio->Fopen(create_local_path(sound_file_path), FILEIO_WRITE_BINARY)) {
+		if(rec_sound_fio->Fopen(full_path, FILEIO_WRITE_BINARY)) {
 			// ヘッダ（サイズは終了時に書き換える）
 			uint8_t hdr[44] = {0};
 			memcpy(hdr, "RIFF", 4);

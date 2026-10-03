@@ -78,6 +78,7 @@ void bubiz_load_state(const char *path);
 void bubiz_capture_screen(void);
 bool bubiz_write_screenshot(const char *path);	// 現在の画面をBMPで保存
 void bubiz_start_record_sound(void);
+bool bubiz_start_record_sound_to(const char *path);	// 指定パスへWAV録音を開始
 void bubiz_stop_record_sound(void);
 
 // 電源オフ要求(ゲストが要求した場合)の有無

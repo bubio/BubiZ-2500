@@ -218,7 +218,7 @@ public:
 	void update_sound(int* extra_frames);
 	void mute_sound();
 	void stop_sound();
-	void start_record_sound();
+	void start_record_sound(const _TCHAR* path = NULL);	// pathが無ければ日時付きの名前でデータディレクトリに保存
 	void stop_record_sound();
 	void restart_record_sound();
 	bool now_record_sound;

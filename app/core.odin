@@ -68,6 +68,7 @@ foreign core {
 	capture_screen :: proc() ---
 	write_screenshot :: proc(path: cstring) -> bool ---
 	start_record_sound :: proc() ---
+	start_record_sound_to :: proc(path: cstring) -> bool ---
 	stop_record_sound :: proc() ---
 
 	power_off_requested :: proc() -> bool ---

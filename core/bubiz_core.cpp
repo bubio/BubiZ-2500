@@ -295,6 +295,15 @@ void bubiz_start_record_sound(void)
 	}
 }
 
+bool bubiz_start_record_sound_to(const char *path)
+{
+	if(g_emu == NULL) {
+		return false;
+	}
+	g_emu->get_osd()->start_record_sound(path);
+	return g_emu->get_osd()->now_record_sound;
+}
+
 void bubiz_stop_record_sound(void)
 {
 	if(g_emu) {
