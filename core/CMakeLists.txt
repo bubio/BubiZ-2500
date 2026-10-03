@@ -34,7 +34,7 @@ file(GLOB MZ2500_SOURCES ${CSP}/vm/mz2500/*.cpp)
 add_library(bubiz_core STATIC
   ${CSP}/common.cpp ${CSP}/config.cpp ${CSP}/debugger.cpp ${CSP}/emu.cpp ${CSP}/fifo.cpp ${CSP}/fileio.cpp
   ${VM_SOURCES} ${FMGEN_SOURCES} ${MZ2500_SOURCES}
-  host/osd.cpp host/osd_console.cpp bubiz_core.cpp)
+  host/osd.cpp host/osd_console.cpp host/png_writer.cpp bubiz_core.cpp)
 
 target_compile_definitions(bubiz_core PRIVATE _MZ2500 BUBIZ_HOST)
 if(MSVC)

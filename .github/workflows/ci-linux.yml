@@ -22,7 +22,11 @@ on:
 
 jobs:
   linux:
-    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-22.04, ubuntu-22.04-arm]
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
       - name: 依存パッケージ
@@ -47,15 +51,18 @@ jobs:
       - name: CLIの単体テスト
         run: odin test app -collection:sokol=.tools/sokol-odin/sokol -extra-linker-flags:"-Lbuild/core" -out:build/apptest
       - name: 動作確認（ウィンドウ無しで実行）
-        run: build/bin/bubiz -headless 60 -nosound
+        run: build/bin/BubiZ-2500 -headless 60 -nosound
       - name: コアの煙テスト
         run: build/core/bubiz_smoke "$RUNNER_TEMP/"
       - name: 配布物の作成(deb / rpm / AppImage)
         run: scripts/package-linux.sh all
+      - name: 配布物の名前
+        id: artifact
+        run: echo "name=$(scripts/artifact-name.sh)" >> "$GITHUB_OUTPUT"
       - name: 配布物のアップロード
         uses: actions/upload-artifact@v4
         with:
-          name: bubiz-linux-${{ runner.arch }}
+          name: ${{ steps.artifact.outputs.name }}
           path: dist/*
           if-no-files-found: error
           retention-days: 14

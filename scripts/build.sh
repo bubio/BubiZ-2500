@@ -23,8 +23,8 @@ fi
 SOKOL_DIR="${SOKOL_DIR:-$ROOT/.tools/sokol-odin/sokol}"
 
 case "$(uname -s)" in
-  Linux|Darwin) EXE=bubiz; WINDOWS=0 ;;
-  MINGW*|MSYS*|CYGWIN*) EXE=bubiz.exe; WINDOWS=1 ;;
+  Linux|Darwin) EXE=BubiZ-2500; WINDOWS=0 ;;
+  MINGW*|MSYS*|CYGWIN*) EXE=BubiZ-2500.exe; WINDOWS=1 ;;
   *) echo "未対応のOSです" >&2; exit 1 ;;
 esac
 

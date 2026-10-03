@@ -29,13 +29,16 @@ jobs:
       - name: 最低対応OS(14.0)の確認
         run: scripts/check-macos-min-version.sh
       - name: 動作確認
-        run: build/bin/bubiz -headless 60 -nosound
+        run: build/bin/BubiZ-2500 -headless 60 -nosound
       - name: 配布物の作成(dmg)
         env:
           BUILD_NUMBER: ${{ github.run_number }}
         run: scripts/package-macos.sh
+      - name: 配布物の名前
+        id: artifact
+        run: echo "name=$(scripts/artifact-name.sh)" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:
-          name: dist-macos-${{ matrix.os }}
+          name: dist-${{ steps.artifact.outputs.name }}
           path: dist/*
           if-no-files-found: error

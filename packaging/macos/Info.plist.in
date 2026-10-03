@@ -9,7 +9,7 @@
 	<key>CFBundleIdentifier</key>
 	<string>io.github.bubio.bubiz-2500</string>
 	<key>CFBundleExecutable</key>
-	<string>bubiz</string>
+	<string>BubiZ-2500</string>
 	<key>CFBundleIconFile</key>
 	<string>bubiz</string>
 	<key>CFBundlePackageType</key>

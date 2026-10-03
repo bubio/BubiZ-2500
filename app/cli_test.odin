@@ -48,12 +48,12 @@ test_missing_value :: proc(t: ^testing.T) {
 
 @(test)
 test_key_event :: proc(t: ^testing.T) {
-	opt, err := parse_args({"-key", "3000:1", "-key", "3200:return:5", "-shotat", "100:/tmp/a.bmp"})
+	opt, err := parse_args({"-key", "3000:1", "-key", "3200:return:5", "-shotat", "100:/tmp/a.png"})
 	testing.expect_value(t, err, "")
 	testing.expect_value(t, len(opt.keys), 2)
 	testing.expect_value(t, opt.keys[0], Key_Event{frame = 3000, vk = '1', hold = 3})
 	testing.expect_value(t, opt.keys[1], Key_Event{frame = 3200, vk = 0x0D, hold = 5})
-	testing.expect_value(t, opt.shots[0].path, "/tmp/a.bmp")
+	testing.expect_value(t, opt.shots[0].path, "/tmp/a.png")
 	delete(opt.keys)
 	delete(opt.shots)
 

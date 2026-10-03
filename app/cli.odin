@@ -1,7 +1,7 @@
 package bubiz
 
 // コマンドラインの解釈（書式はQUASI88に準じる）
-//   bubiz [-option] [image-file [image-No]] ...
+//   BubiZ-2500 [-option] [image-file [image-No]] ...
 
 import "core:fmt"
 import "core:os"
@@ -56,7 +56,7 @@ Options :: struct {
 	no_config:     bool,
 	save_config:   bool,
 	headless:      int, // >0ならウィンドウ無しでそのフレーム数だけ実行
-	screenshot:    string, // headless終了時に保存するBMP
+	screenshot:    string, // headless終了時に保存するPNG
 	wav:           string, // headless中の音声を録音するWAV
 	keys:          [dynamic]Key_Event,
 	shots:         [dynamic]Shot_Event,
@@ -424,7 +424,7 @@ parse_args :: proc(args: []string) -> (opt: Options, err: string) {
 			}
 			append(&opt.states, State_Event{frame = frame, slot = slot, load = name == "-loadstate"})
 		case "-shotat":
-			// -shotat <frame>:<file>  指定フレームで画面をBMP保存
+			// -shotat <frame>:<file>  指定フレームで画面をPNG保存
 			v, ok := take_value(args, &i, name)
 			if !ok {return opt, "オプション -shotat には値が必要です"}
 			idx := strings.index_byte(v, ':')
@@ -451,7 +451,7 @@ parse_args :: proc(args: []string) -> (opt: Options, err: string) {
 }
 
 usage :: proc() {
-	fmt.println("使い方: bubiz [-option] [image-file [image-No]] [image-file [image-No]] ...")
+	fmt.println("使い方: BubiZ-2500 [-option] [image-file [image-No]] [image-file [image-No]] ...")
 	fmt.println()
 	fmt.println("  イメージファイルは拡張子で判定します。フロッピーは最大4台(ドライブ1:〜4:)に")
 	fmt.println("  先頭から順に割り当てます。直後の数字は複数イメージ内の番号(1始まり)です。")
@@ -497,7 +497,7 @@ usage :: proc() {
 	fmt.println("    F11          フルスクリーンの切り替え")
 	fmt.println("    F12          リセット (Ctrl+F12: スペシャルリセット)")
 	fmt.println("    Ctrl+P       一時停止 / 再開")
-	fmt.println("    Ctrl+S       スクリーンショットを保存(データディレクトリへBMP)")
+	fmt.println("    Ctrl+S       スクリーンショットを保存(ピクチャ/BubiZ-2500へPNG)")
 	fmt.println("    Ctrl+F1〜F4        ステートを保存(スロット1〜4)")
 	fmt.println("    Ctrl+Shift+F1〜F4  ステートを復元(スロット1〜4)")
 	fmt.println("    Ctrl+F       画面フィルタ(RGB)の切り替え")
@@ -507,7 +507,7 @@ usage :: proc() {
 	fmt.println("    ドラッグ&ドロップ  ディスクイメージ・テープ・ハードディスクを挿入")
 	fmt.println()
 	fmt.println("  -headless <frames>  ウィンドウ無しで指定フレーム数実行して終了(検証用)")
-	fmt.println("  -screenshot <file>  -headless終了時の画面をBMPで保存")
+	fmt.println("  -screenshot <file>  -headless終了時の画面をPNGで保存")
 	fmt.println("  -key <frame>:<key>[:<hold>]  -headless中、指定フレームでキーを押す(複数指定可)")
 	fmt.println("                      key: 英数字1文字 / RETURN SPACE ESC TAB BS UP DOWN LEFT RIGHT F1-F12 SHIFT CTRL ...")
 	fmt.println("                      hold: 押し続けるフレーム数(既定3)")
@@ -522,7 +522,7 @@ print_version :: proc() {
 }
 
 exit_with_error :: proc(msg: string) -> ! {
-	fmt.eprintfln("bubiz: %s", msg)
-	fmt.eprintln("ヘルプは bubiz -help を参照してください。")
+	fmt.eprintfln("BubiZ-2500: %s", msg)
+	fmt.eprintln("ヘルプは BubiZ-2500 -help を参照してください。")
 	os.exit(2)
 }

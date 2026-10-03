@@ -27,11 +27,14 @@ jobs:
       - name: ビルド
         run: scripts/build.sh release
       - name: 動作確認
-        run: build/bin/bubiz.exe -headless 60 -nosound
+        run: build/bin/BubiZ-2500.exe -headless 60 -nosound
       - name: 配布物の作成(zip)
         run: scripts/package-windows.sh
+      - name: 配布物の名前
+        id: artifact
+        run: echo "name=$(scripts/artifact-name.sh)" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:
-          name: dist-windows-x86_64
+          name: dist-${{ steps.artifact.outputs.name }}
           path: dist/*
           if-no-files-found: error

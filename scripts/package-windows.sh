@@ -7,7 +7,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${BUILD_DIR:-$ROOT/build}"
 DIST_DIR="${DIST_DIR:-$ROOT/dist}"
 VERSION="$("$ROOT/scripts/version.sh")"
-BIN="$BUILD_DIR/bin/bubiz.exe"
+BIN="$BUILD_DIR/bin/BubiZ-2500.exe"
 
 [ -f "$BIN" ] || { echo "実行ファイルがありません: $BIN (先にscripts/build.sh)" >&2; exit 1; }
 mkdir -p "$DIST_DIR"
@@ -15,11 +15,11 @@ WORK="$BUILD_DIR/package/BubiZ-2500-${VERSION}"
 rm -rf "$BUILD_DIR/package"
 mkdir -p "$WORK/licenses/csp-license"
 
-cp "$BIN" "$WORK/bubiz.exe"
+cp "$BIN" "$WORK/BubiZ-2500.exe"
 cp "$ROOT/LICENSE" "$WORK/licenses/LICENSE"
 cp -R "$ROOT/core/csp/license/." "$WORK/licenses/csp-license/"
 
-ZIP="$DIST_DIR/BubiZ-2500-${VERSION}-windows-x86_64.zip"
+ZIP="$DIST_DIR/$("$ROOT/scripts/artifact-name.sh").zip"
 rm -f "$ZIP"
 # zipの作成はPythonに統一する(Windows/Linux/macOSで同じ手順になる)
 PY="$(command -v python3 || command -v python)"

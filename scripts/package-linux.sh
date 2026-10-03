@@ -15,7 +15,7 @@ BUILD_DIR="${BUILD_DIR:-$ROOT/build}"
 DIST_DIR="${DIST_DIR:-$ROOT/dist}"
 BUILD_NUMBER="${BUILD_NUMBER:-1}"
 VERSION="$("$ROOT/scripts/version.sh")"
-BIN="$BUILD_DIR/bin/bubiz"
+BIN="$BUILD_DIR/bin/BubiZ-2500"
 
 case "$(uname -m)" in
   x86_64)        DEB_ARCH=amd64; RPM_ARCH=x86_64;  APPIMAGE_ARCH=x86_64 ;;
@@ -32,8 +32,8 @@ mkdir -p "$WORK"
 # 共通: インストール先のファイルツリー(/usr 以下)を組み立てる
 stage_tree() {
   local root="$1"
-  install -Dm755 "$BIN" "$root/usr/bin/bubiz"
-  strip "$root/usr/bin/bubiz" || true
+  install -Dm755 "$BIN" "$root/usr/bin/BubiZ-2500"
+  strip "$root/usr/bin/BubiZ-2500" || true
   install -Dm644 "$ROOT/packaging/linux/bubiz.desktop" "$root/usr/share/applications/bubiz.desktop"
   install -Dm644 "$ROOT/packaging/icons/bubiz.png" "$root/usr/share/icons/hicolor/256x256/apps/bubiz.png"
   install -Dm644 "$ROOT/LICENSE" "$root/usr/share/doc/bubiz-2500/LICENSE"
@@ -60,7 +60,7 @@ Description: SHARP MZ-2500 emulator
  MZ-2500エミュレーター。エミュレーションコアにCommon Source Code Projectの
  EmuZ-2500を利用しています。BIOS ROMは含まれません。
 CONTROL
-  dpkg-deb --root-owner-group --build "$root" "$DIST_DIR/bubiz-2500_${VERSION}-${BUILD_NUMBER}_${DEB_ARCH}.deb"
+  dpkg-deb --root-owner-group --build "$root" "$DIST_DIR/BubiZ-2500-${VERSION}-linux-${DEB_ARCH}.deb"
 }
 
 make_rpm() {
@@ -89,13 +89,13 @@ mkdir -p %{buildroot}
 cp -a ${root}/usr %{buildroot}/usr
 
 %files
-/usr/bin/bubiz
+/usr/bin/BubiZ-2500
 /usr/share/applications/bubiz.desktop
 /usr/share/icons/hicolor/256x256/apps/bubiz.png
 /usr/share/doc/bubiz-2500
 SPEC
   rpmbuild -bb --target "$RPM_ARCH" --define "_topdir $top" "$top/SPECS/bubiz-2500.spec"
-  cp "$top"/RPMS/*/bubiz-2500-*.rpm "$DIST_DIR/"
+  cp "$top"/RPMS/*/bubiz-2500-*.rpm "$DIST_DIR/BubiZ-2500-${VERSION}-linux-${RPM_ARCH}.rpm"
 }
 
 make_appimage() {
@@ -103,7 +103,7 @@ make_appimage() {
   stage_tree "$appdir"
   cp "$ROOT/packaging/linux/bubiz.desktop" "$appdir/bubiz.desktop"
   cp "$ROOT/packaging/icons/bubiz.png" "$appdir/bubiz.png"
-  ln -s usr/bin/bubiz "$appdir/AppRun"
+  ln -s usr/bin/BubiZ-2500 "$appdir/AppRun"
   local tool="$WORK/appimagetool"
   if [ -z "${APPIMAGETOOL:-}" ]; then
     curl -fsSL -o "$tool" "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-${APPIMAGE_ARCH}.AppImage"
@@ -112,7 +112,7 @@ make_appimage() {
   fi
   # FUSEが無い環境(CIなど)でも動くよう、展開して実行させる
   ARCH="$APPIMAGE_ARCH" APPIMAGE_EXTRACT_AND_RUN=1 "$APPIMAGETOOL" "$appdir" \
-    "$DIST_DIR/BubiZ-2500-${VERSION}-${APPIMAGE_ARCH}.AppImage"
+    "$DIST_DIR/BubiZ-2500-${VERSION}-linux-${APPIMAGE_ARCH}.AppImage"
 }
 
 case "$TARGET" in

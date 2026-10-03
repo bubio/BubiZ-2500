@@ -13,6 +13,7 @@
 #include <unistd.h>
 #endif
 #include "osd.h"
+#include "png_writer.h"
 #include "vk.h"
 #include "../csp/emu.h"
 #include "../csp/fifo.h"
@@ -385,11 +386,11 @@ std::string g_snap_dir;
 
 void OSD::capture_screen()
 {
-	// 日時付きファイル名でBMP保存
+	// 日時付きファイル名でPNG保存
 	time_t t = time(NULL);
 	struct tm *lt = localtime(&t);
 	_TCHAR name[_MAX_PATH];
-	my_stprintf_s(name, _MAX_PATH, _T("%04d-%02d-%02d_%02d-%02d-%02d.bmp"), lt->tm_year + 1900, lt->tm_mon + 1, lt->tm_mday, lt->tm_hour, lt->tm_min, lt->tm_sec);
+	my_stprintf_s(name, _MAX_PATH, _T("%04d-%02d-%02d_%02d-%02d-%02d.png"), lt->tm_year + 1900, lt->tm_mon + 1, lt->tm_mday, lt->tm_hour, lt->tm_min, lt->tm_sec);
 	if(!g_snap_dir.empty()) {
 		std::string path = g_snap_dir + (char)'/' + name;
 		write_bitmap_to_file(&vm_screen_buffer, path.c_str());
@@ -398,8 +399,14 @@ void OSD::capture_screen()
 	}
 }
 
+static const uint32_t *bitmap_row(void *ctx, int y)
+{
+	return (const uint32_t *)((bitmap_t *)ctx)->get_buffer(y);
+}
+
 void OSD::write_bitmap_to_file(bitmap_t *bitmap, const _TCHAR *file_path)
 {
+	// PNGで保存する
 	if(!bitmap->initialized()) {
 		return;
 	}
@@ -407,21 +414,7 @@ void OSD::write_bitmap_to_file(bitmap_t *bitmap, const _TCHAR *file_path)
 	if(fp == NULL) {
 		return;
 	}
-	int w = bitmap->width, h = bitmap->height;
-	uint32_t size = 54 + (uint32_t)w * h * 4;
-	uint8_t hdr[54] = {0};
-	hdr[0] = 'B'; hdr[1] = 'M';
-	memcpy(hdr + 2, &size, 4);
-	hdr[10] = 54;
-	hdr[14] = 40;
-	memcpy(hdr + 18, &w, 4);
-	memcpy(hdr + 22, &h, 4);	// 正の高さ = 下から上
-	hdr[26] = 1;
-	hdr[28] = 32;
-	fwrite(hdr, 1, 54, fp);
-	for(int y = h - 1; y >= 0; y--) {
-		fwrite(bitmap->get_buffer(y), 4, w, fp);
-	}
+	write_png_rgb(fp, bitmap->width, bitmap->height, bitmap_row, bitmap);
 	fclose(fp);
 }
 

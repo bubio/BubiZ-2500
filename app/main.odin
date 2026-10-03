@@ -111,7 +111,7 @@ run_headless :: proc(opt: Options) {
 	if opt.wav != "" {
 		recording = start_record_sound_to(strings.clone_to_cstring(opt.wav, context.temp_allocator))
 		if !recording {
-			fmt.eprintfln("bubiz: WAV録音を開始できません: %s", opt.wav)
+			fmt.eprintfln("BubiZ-2500: WAV録音を開始できません: %s", opt.wav)
 		}
 	}
 	// 録音時はウィンドウ版の音声スレッド相当として、1フレーム分の音を取り出し続ける

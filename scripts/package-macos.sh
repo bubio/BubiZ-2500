@@ -8,8 +8,7 @@ BUILD_DIR="${BUILD_DIR:-$ROOT/build}"
 DIST_DIR="${DIST_DIR:-$ROOT/dist}"
 BUILD_NUMBER="${BUILD_NUMBER:-1}"
 VERSION="$("$ROOT/scripts/version.sh")"
-BIN="$BUILD_DIR/bin/bubiz"
-ARCH="$(uname -m)"   # arm64 / x86_64
+BIN="$BUILD_DIR/bin/BubiZ-2500"
 
 [ -x "$BIN" ] || { echo "実行ファイルがありません: $BIN (先にscripts/build.sh)" >&2; exit 1; }
 mkdir -p "$DIST_DIR"
@@ -18,8 +17,8 @@ rm -rf "$WORK"
 APP="$WORK/stage/BubiZ-2500.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-cp "$BIN" "$APP/Contents/MacOS/bubiz"
-strip -x "$APP/Contents/MacOS/bubiz" || true
+cp "$BIN" "$APP/Contents/MacOS/BubiZ-2500"
+strip -x "$APP/Contents/MacOS/BubiZ-2500" || true
 sed -e "s/@VERSION@/$VERSION/" -e "s/@BUILD_NUMBER@/$BUILD_NUMBER/" \
   "$ROOT/packaging/macos/Info.plist.in" > "$APP/Contents/Info.plist"
 
@@ -43,7 +42,7 @@ cp -R "$ROOT/core/csp/license/." "$APP/Contents/Resources/licenses/csp-license/"
 codesign --force --deep --sign - "$APP"
 
 ln -s /Applications "$WORK/stage/Applications"
-DMG="$DIST_DIR/BubiZ-2500-${VERSION}-macos-${ARCH}.dmg"
+DMG="$DIST_DIR/$("$ROOT/scripts/artifact-name.sh").dmg"
 rm -f "$DMG"
 hdiutil create -volname "BubiZ-2500 ${VERSION}" -srcfolder "$WORK/stage" -ov -format UDZO "$DMG"
 echo "配布物:"; ls -l "$DIST_DIR"

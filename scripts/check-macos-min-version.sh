@@ -4,7 +4,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BIN="${1:-$ROOT/build/bin/bubiz}"
+BIN="${1:-$ROOT/build/bin/BubiZ-2500}"
 EXPECTED="14.0"
 
 # LC_BUILD_VERSION の minos(最低対応OS) を取り出す
