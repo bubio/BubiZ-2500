@@ -1,0 +1,43 @@
+name: CI (Windows)
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    # ビルドに関係するファイルが変わったときだけ実行する
+    paths:
+      - "core/**"
+      - "app/**"
+      - "scripts/**"
+      - "mise.toml"
+      - ".github/workflows/ci-windows.yml"
+  pull_request:
+    paths:
+      - "core/**"
+      - "app/**"
+      - "scripts/**"
+      - "mise.toml"
+      - ".github/workflows/ci-windows.yml"
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      # MSVCの環境(cl, link, lib)を有効にする
+      - uses: ilammy/msvc-dev-cmd@v1
+      - uses: laytan/setup-odin@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: セットアップ
+        run: scripts/setup.sh
+      - name: ビルド
+        run: scripts/build.sh release
+      - name: CLIの単体テスト
+        run: odin test app -collection:sokol=.tools/sokol-odin/sokol -extra-linker-flags:"/LIBPATH:build/core" -out:build/apptest.exe
+      - name: 動作確認（ウィンドウ無しで実行）
+        run: build/bin/bubiz.exe -headless 60 -nosound
+      - name: コアの煙テスト
+        run: build/core/bubiz_smoke.exe "$RUNNER_TEMP/"

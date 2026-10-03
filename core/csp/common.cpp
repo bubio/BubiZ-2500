@@ -994,7 +994,11 @@ static void _my_mkdir(std::string t_dir)
 {
 	struct stat st;
 	if(stat(t_dir.c_str(), &st) != 0) {
+#ifdef _WIN32
+		_mkdir(t_dir.c_str());
+#else
 		mkdir(t_dir.c_str(), 0700);
+#endif
 	}
 }
 #endif

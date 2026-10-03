@@ -6,8 +6,12 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <time.h>
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
 #include "osd.h"
 #include "vk.h"
 #include "../csp/emu.h"
@@ -102,10 +106,14 @@ void OSD::force_unlock_vm()
 
 void OSD::sleep(uint32_t ms)
 {
+#ifdef _WIN32
+	Sleep(ms);
+#else
 	struct timespec ts;
 	ts.tv_sec = ms / 1000;
 	ts.tv_nsec = (long)(ms % 1000) * 1000000L;
 	nanosleep(&ts, NULL);
+#endif
 }
 
 // ----------------------------------------------------------------------------

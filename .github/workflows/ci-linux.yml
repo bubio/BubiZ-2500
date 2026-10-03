@@ -1,4 +1,4 @@
-name: CI
+name: CI (Linux)
 
 on:
   push:
@@ -9,14 +9,14 @@ on:
       - "app/**"
       - "scripts/**"
       - "mise.toml"
-      - ".github/workflows/ci.yml"
+      - ".github/workflows/ci-linux.yml"
   pull_request:
     paths:
       - "core/**"
       - "app/**"
       - "scripts/**"
       - "mise.toml"
-      - ".github/workflows/ci.yml"
+      - ".github/workflows/ci-linux.yml"
 
 jobs:
   linux:
@@ -46,6 +46,4 @@ jobs:
       - name: 動作確認（ウィンドウ無しで実行）
         run: build/bin/bubiz -headless 60 -nosound
       - name: コアの煙テスト
-        run: |
-          g++ -std=gnu++17 -Icore core/tests/smoke.cpp build/core/libbubiz_core.a -lpthread -o build/smoke
-          build/smoke "$RUNNER_TEMP/"
+        run: build/core/bubiz_smoke "$RUNNER_TEMP/"

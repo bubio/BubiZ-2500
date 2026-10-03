@@ -25,6 +25,7 @@ cd "$DEST/sokol"
 case "$(uname -s)" in
   Linux)  sh build_clibs_linux.sh ;;
   Darwin) sh build_clibs_macos.sh ;;
+  MINGW*|MSYS*|CYGWIN*) cmd //c build_clibs_windows.cmd ;;
   *) echo "このOSではscripts/setup.shは未対応です" >&2; exit 1 ;;
 esac
 echo "セットアップ完了"

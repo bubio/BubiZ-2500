@@ -29,11 +29,26 @@ add_library(bubiz_core STATIC
   host/osd.cpp bubiz_core.cpp)
 
 target_compile_definitions(bubiz_core PRIVATE _MZ2500 BUBIZ_HOST)
-target_include_directories(bubiz_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/compat)
-# CSPのソースがWindows/Qt環境で暗黙に取得していたヘッダを補う
-target_compile_options(bubiz_core PRIVATE
-  -include ${CMAKE_CURRENT_SOURCE_DIR}/compat/bubiz_prelude.h
-  -w -fno-strict-aliasing -fpermissive)
+if(MSVC)
+  # MSVC: CSPの本来のビルド環境。警告は抑止し、強制インクルードで不足ヘッダを補う
+  target_compile_definitions(bubiz_core PRIVATE _CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_WARNINGS)
+  target_compile_options(bubiz_core PRIVATE /w /FI${CMAKE_CURRENT_SOURCE_DIR}/compat/bubiz_prelude.h)
+else()
+  # Linux/macOS: Windows専用ヘッダio.hの代替を置いたcompatを優先し、不足ヘッダを強制インクルードで補う
+  target_include_directories(bubiz_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/compat)
+  target_compile_options(bubiz_core PRIVATE
+    -include ${CMAKE_CURRENT_SOURCE_DIR}/compat/bubiz_prelude.h
+    -w -fno-strict-aliasing)
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(bubiz_core PRIVATE -fpermissive)
+  endif()
+endif()
 target_include_directories(bubiz_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-find_package(Threads REQUIRED)
-target_link_libraries(bubiz_core PUBLIC Threads::Threads)
+if(NOT MSVC)
+  find_package(Threads REQUIRED)
+  target_link_libraries(bubiz_core PUBLIC Threads::Threads)
+endif()
+
+# 煙テスト(ROM無しで生成・駆動・描画・音声取得ができること)
+add_executable(bubiz_smoke tests/smoke.cpp)
+target_link_libraries(bubiz_smoke PRIVATE bubiz_core)

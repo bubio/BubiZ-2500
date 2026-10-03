@@ -19,7 +19,9 @@
 #ifdef USE_SOCKET
 #define SOCKET_MAX 4
 #define SOCKET_BUFFER_MAX 0x100000
+#ifndef _WIN32
 typedef int SOCKET;
+#endif
 #endif
 
 #define SCREEN_FILTER_NONE	0
@@ -251,7 +253,7 @@ public:
 #ifdef USE_SOCKET
 	SOCKET get_socket(int ch)
 	{
-		return -1;
+		return (SOCKET)-1;
 	}
 	void notify_socket_connected(int ch) {}
 	void notify_socket_disconnected(int ch) {}

@@ -14,7 +14,7 @@
 #include <sys/types.h>
 #endif
 #include <stdint.h>
-#ifdef __cplusplus
+#if defined(__cplusplus) && !defined(_WIN32)
 typedef intptr_t LONG_PTR;
 typedef uintptr_t ULONG_PTR;
 #endif

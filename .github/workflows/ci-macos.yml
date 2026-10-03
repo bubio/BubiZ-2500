@@ -1,0 +1,43 @@
+name: CI (macOS)
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    # ビルドに関係するファイルが変わったときだけ実行する
+    paths:
+      - "core/**"
+      - "app/**"
+      - "scripts/**"
+      - "mise.toml"
+      - ".github/workflows/ci-macos.yml"
+  pull_request:
+    paths:
+      - "core/**"
+      - "app/**"
+      - "scripts/**"
+      - "mise.toml"
+      - ".github/workflows/ci-macos.yml"
+
+jobs:
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        # macos-14: Apple Silicon / macos-15-intel: Intel
+        os: [macos-14, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: laytan/setup-odin@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: セットアップ
+        run: scripts/setup.sh
+      - name: ビルド
+        run: scripts/build.sh release
+      - name: CLIの単体テスト
+        run: odin test app -collection:sokol=.tools/sokol-odin/sokol -extra-linker-flags:"-Lbuild/core" -out:build/apptest
+      - name: 動作確認（ウィンドウ無しで実行）
+        run: build/bin/bubiz -headless 60 -nosound
+      - name: コアの煙テスト
+        run: build/core/bubiz_smoke "$RUNNER_TEMP/"
