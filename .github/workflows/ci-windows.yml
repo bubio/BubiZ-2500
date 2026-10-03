@@ -30,8 +30,12 @@ jobs:
       - uses: actions/checkout@v4
       # MSVCの環境(cl, link, lib)を有効にする
       - uses: ilammy/msvc-dev-cmd@v1
+      - name: Odinのバージョン(mise.tomlで固定)
+        id: odin
+        run: echo "version=$(scripts/odin-version.sh)" >> "$GITHUB_OUTPUT"
       - uses: laytan/setup-odin@v2
         with:
+          release: ${{ steps.odin.outputs.version }}
           token: ${{ secrets.GITHUB_TOKEN }}
       - name: セットアップ
         run: scripts/setup.sh

@@ -1,4 +1,6 @@
 [tools]
-# Odinコンパイラ。bindings(sokol-odin)の対応バージョンに合わせて更新する
+# Odinコンパイラのバージョン(固定)。変えるときはsokol-odinの対応状況を確認し、
+# CIとローカルでビルドとテストが通ることを確かめてから更新する。
+# CI・リリースのワークフローもこの値を読む(scripts/odin-version.sh)。
 # (cmakeはここに含めない。無い場合だけscripts/setup.shが導入する)
-odin = "latest"
+odin = "dev-2026-09"

@@ -35,7 +35,8 @@ jobs:
           sudo apt-get install -y cmake rpm llvm-18-dev libgl-dev libasound2-dev libx11-dev libxi-dev libxcursor-dev
       - name: Odinをビルド
         run: |
-          git clone --depth 1 https://github.com/odin-lang/Odin "$HOME/odin"
+          # mise.tomlで固定したバージョンのタグを取得する
+          git clone --depth 1 --branch "$(scripts/odin-version.sh)" https://github.com/odin-lang/Odin "$HOME/odin"
           cd "$HOME/odin"
           LLVM_CONFIG=llvm-config-18 CXX=clang++-18 ./build_odin.sh release
           echo "$HOME/odin" >> "$GITHUB_PATH"
