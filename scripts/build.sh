@@ -42,6 +42,10 @@ cmake --build "$BUILD_DIR/core" --parallel
 
 # 2. アプリケーション層 (Odin)
 if [ "$MODE" = "debug" ]; then ODIN_FLAGS=(-debug); else ODIN_FLAGS=(-o:speed); fi
+if [ "$(uname -s)" = "Darwin" ]; then
+  # macOSは13以上が対象(Odinの既定は11.0)
+  ODIN_FLAGS+=(-minimum-os-version:13.0.0)
+fi
 if [ "$WINDOWS" = 1 ]; then
   LINK_FLAGS="/LIBPATH:$(cygpath -w "$BUILD_DIR/core")"
 else
