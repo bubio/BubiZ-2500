@@ -51,3 +51,10 @@ jobs:
         run: build/core/bubiz_smoke "$RUNNER_TEMP/"
       - name: 配布物の作成(dmg)
         run: scripts/package-macos.sh
+      - name: 配布物のアップロード
+        uses: actions/upload-artifact@v4
+        with:
+          name: bubiz-macos-${{ matrix.os }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14

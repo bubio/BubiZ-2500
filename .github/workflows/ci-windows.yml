@@ -49,3 +49,10 @@ jobs:
         run: build/core/bubiz_smoke.exe "$RUNNER_TEMP/"
       - name: 配布物の作成(zip)
         run: scripts/package-windows.sh
+      - name: 配布物のアップロード
+        uses: actions/upload-artifact@v4
+        with:
+          name: bubiz-windows
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
