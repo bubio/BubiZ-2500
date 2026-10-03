@@ -1,0 +1,44 @@
+diff --git a/sokol/c/sokol_app.h b/sokol/c/sokol_app.h
+index ae135ba..5e47750 100644
+--- a/sokol/c/sokol_app.h
++++ b/sokol/c/sokol_app.h
+@@ -5457,12 +5457,28 @@ _SOKOL_PRIVATE double _sapp_macos_mtl_timing_frame_duration(void) {
+     }
+ }
+ 
++// [BubiZ] macOS 13以下用の代替タイマー
++static NSTimer* _sapp_bubiz_fallback_timer = nil;
++
+ _SOKOL_PRIVATE void _sapp_macos_mtl_start_display_link(void) {
+     if (nil != _sapp.mtl.display_link) {
+         _sapp.mtl.display_link.paused = false;
+         return;
+     }
+     // NOTE: CADisplayLink is only available since macOS 14.0
++    // [BubiZ] macOS 13以下ではNSTimerで代用する
++    if (![_sapp.macos.view respondsToSelector:@selector(displayLinkWithTarget:selector:)]) {
++        if (nil == _sapp_bubiz_fallback_timer) {
++            _sapp_bubiz_fallback_timer = [NSTimer
++                timerWithTimeInterval: 1.0 / 60.0
++                target: _sapp.macos.view
++                selector: @selector(displayLinkFired:)
++                userInfo: nil
++                repeats: YES];
++            [[NSRunLoop currentRunLoop] addTimer:_sapp_bubiz_fallback_timer forMode:NSRunLoopCommonModes];
++        }
++        return;
++    }
+     SOKOL_ASSERT(nil == _sapp.mtl.display_link);
+     SOKOL_ASSERT(nil == _sapp.mtl.obscured_timer);
+     SOKOL_ASSERT(nil != _sapp.macos.view);
+@@ -5475,6 +5491,10 @@ _SOKOL_PRIVATE void _sapp_macos_mtl_start_display_link(void) {
+ }
+ 
+ _SOKOL_PRIVATE void _sapp_macos_mtl_stop_display_link(void) {
++    if (nil != _sapp_bubiz_fallback_timer) {
++        [_sapp_bubiz_fallback_timer invalidate];
++        _sapp_bubiz_fallback_timer = nil;
++    }
+     if (nil != _sapp.mtl.display_link) {
+         _sapp.mtl.display_link.paused = true;
+     }
