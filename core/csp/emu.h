@@ -30,6 +30,9 @@
 #include "vm/vm.h"
 
 #if defined(BUBIZ_HOST)
+#ifndef _WIN32
+#include <pthread.h>
+#endif
 #define OSD_BUBIZ
 #elif defined(_USE_QT)
 #include <pthread.h>
@@ -404,6 +407,12 @@ public:
 #if defined(OSD_QT)
 	pthread_t debugger_thread_id;
 	CSP_Debugger *hDebugger;
+#elif defined(OSD_BUBIZ)
+#ifdef _WIN32
+	HANDLE hDebuggerThread;
+#else
+	pthread_t debugger_thread_id;
+#endif
 #elif defined(OSD_WIN32)
 	HANDLE hDebuggerThread;
 #else

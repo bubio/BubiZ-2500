@@ -5,6 +5,9 @@ package bubiz
 import "base:runtime"
 import "core:fmt"
 import "core:strings"
+import "core:sync"
+import "core:thread"
+import "core:time"
 
 import sapp "sokol:app"
 import saudio "sokol:audio"
@@ -25,18 +28,24 @@ Frontend :: struct {
 	tex_h:      i32,
 	pixels:     []u8,
 	pass:       sg.Pass_Action,
+	// エミュレーションスレッド(デバッガーでCPUが止まってもウィンドウが固まらないよう、描画と分ける)
+	emu_thread: ^thread.Thread,
+	running:    bool, // atomic: falseにするとエミュレーションスレッドが終わる
+	paused:     bool, // atomic
+	emu_frames: int, // atomic: FPS表示用の、エミュレーションを進めたフレーム数
+	last_seq:   u64, // 最後にテクスチャへ反映したフレームの番号
 	// 時間
-	acc:        f64, // 未消化のエミュレーション時間(秒)
 	fps_time:   f64,
 	fps_frames: int,
 	title:      cstring,
-	paused:     bool,
-	emu_frames: int, // FPS表示用: エミュレーションを進めたフレーム数
 	// マウス
 	mouse_grab: bool, // マウスをキャプチャ中か
 	mouse_dx:   i32,
 	mouse_dy:   i32,
 	mouse_btn:  i32, // b0=左 b1=右 b2=中
+	// キーボードによるジョイスティック
+	joy_mode:   bool,
+	joy_status: u32, // bit0-3: 上下左右, bit4-: ボタン
 }
 
 @(private = "file")
@@ -86,6 +95,13 @@ init :: proc "c" () {
 	if fe.opt.mouse {
 		enable_mouse(true)
 	}
+	fe.joy_mode = fe.opt.joystick
+	if fe.opt.debug {
+		open_debugger(0)
+	}
+
+	sync.atomic_store(&fe.running, true)
+	fe.emu_thread = thread.create_and_start(emu_thread_proc)
 	fe.pass = {
 		colors = {0 = {load_action = .CLEAR, clear_value = {0, 0, 0, 1}}},
 	}
@@ -152,39 +168,22 @@ frame :: proc "c" () {
 		dt = 0.25
 	}
 
-	if !fe.paused {
-		interval := 1.0 / frame_rate()
-		if fe.opt.wait {
-			// 速度比を考慮して消化すべきエミュレーション時間を積む
-			fe.acc += dt * f64(fe.opt.speed) / 100.0
-			for fe.acc >= interval {
-				run()
-				fe.emu_frames += 1
-				fe.acc -= interval
-			}
-		} else {
-			// 全速: 1フレーム分の時間で数フレーム進める
-			for _ in 0 ..< 8 {
-				run()
-				fe.emu_frames += 1
-			}
-			fe.acc = 0
-		}
-	}
-
 	if fe.opt.mouse {
 		// 1フレーム分の移動量とボタン状態をコアへ渡す
 		set_mouse(fe.mouse_dx, fe.mouse_dy, fe.mouse_btn)
 		fe.mouse_dx, fe.mouse_dy = 0, 0
 	}
 
-	draw_screen()
+	// エミュレーションスレッドが公開した最新のフレームを取り込む
 	w, h: i32
 	screen_size(&w, &h)
 	if w > 0 && h > 0 {
 		ensure_texture(w, h)
-		read_screen_rgba(raw_data(fe.pixels))
-		sg.update_image(fe.image, {mip_levels = {0 = {ptr = raw_data(fe.pixels), size = uint(len(fe.pixels))}}})
+		seq: u64
+		if copy_frame(raw_data(fe.pixels), w, h, &seq) && seq != fe.last_seq {
+			fe.last_seq = seq
+			sg.update_image(fe.image, {mip_levels = {0 = {ptr = raw_data(fe.pixels), size = uint(len(fe.pixels))}}})
+		}
 	}
 
 	sg.begin_pass({action = fe.pass, swapchain = sglue.swapchain()})
@@ -201,15 +200,15 @@ frame :: proc "c" () {
 	fe.fps_time += dt
 	fe.fps_frames += 1
 	if fe.opt.show_fps && fe.fps_time >= 1.0 {
+		emu_frames := sync.atomic_exchange(&fe.emu_frames, 0)
 		sapp.set_window_title(
 			strings.clone_to_cstring(
-				fmt.tprintf("BubiZ-2500 - %.1f fps (表示 %.1f fps)", f64(fe.emu_frames) / fe.fps_time, f64(fe.fps_frames) / fe.fps_time),
+				fmt.tprintf("BubiZ-2500 - %.1f fps (表示 %.1f fps)", f64(emu_frames) / fe.fps_time, f64(fe.fps_frames) / fe.fps_time),
 				context.temp_allocator,
 			),
 		)
 		fe.fps_time = 0
 		fe.fps_frames = 0
-		fe.emu_frames = 0
 	}
 	free_all(context.temp_allocator)
 }
@@ -254,11 +253,17 @@ event :: proc "c" (e: ^sapp.Event) {
 		if handle_hotkey(e) {
 			return
 		}
+		if fe.joy_mode && joy_key(e.key_code, true) {
+			return
+		}
 		vk := to_vk(e.key_code)
 		if vk != 0 {
 			key_down(i32(vk), e.key_repeat)
 		}
 	case .KEY_UP:
+		if fe.joy_mode && joy_key(e.key_code, false) {
+			return
+		}
 		vk := to_vk(e.key_code)
 		if vk != 0 {
 			key_up(i32(vk))
@@ -293,6 +298,17 @@ event :: proc "c" (e: ^sapp.Event) {
 handle_hotkey :: proc(e: ^sapp.Event) -> bool {
 	ctrl := (e.modifiers & sapp.MODIFIER_CTRL) != 0
 	#partial switch e.key_code {
+	case .F1 ..= .F4:
+		// Ctrl+F1〜F4: ステート保存 / Ctrl+Shift+F1〜F4: ステート復元(スロット1〜4)
+		if ctrl {
+			slot := i32(int(e.key_code) - int(sapp.Keycode.F1)) + 1
+			if (e.modifiers & sapp.MODIFIER_SHIFT) != 0 {
+				load_state_slot(slot)
+			} else {
+				save_state_slot(slot)
+			}
+			return true
+		}
 	case .F11:
 		sapp.toggle_fullscreen()
 		return true
@@ -305,7 +321,7 @@ handle_hotkey :: proc(e: ^sapp.Event) -> bool {
 		return true
 	case .P:
 		if ctrl {
-			fe.paused = !fe.paused
+			sync.atomic_store(&fe.paused, !sync.atomic_load(&fe.paused))
 			return true
 		}
 	case .S:
@@ -318,8 +334,43 @@ handle_hotkey :: proc(e: ^sapp.Event) -> bool {
 			set_mouse_grab(!fe.mouse_grab)
 			return true
 		}
+	case .D:
+		if ctrl {
+			open_debugger(0)
+			return true
+		}
+	case .J:
+		if ctrl {
+			fe.joy_mode = !fe.joy_mode
+			fe.joy_status = 0
+			set_joystick(0, 0)
+			return true
+		}
 	}
 	return false
+}
+
+// キーボードをジョイスティックとして扱う。対象のキーならtrueを返す
+@(private = "file")
+joy_key :: proc(k: sapp.Keycode, down: bool) -> bool {
+	bit: u32
+	#partial switch k {
+	case .UP: bit = 1 << 0
+	case .DOWN: bit = 1 << 1
+	case .LEFT: bit = 1 << 2
+	case .RIGHT: bit = 1 << 3
+	case .Z: bit = 1 << 4
+	case .X: bit = 1 << 5
+	case:
+		return false
+	}
+	if down {
+		fe.joy_status |= bit
+	} else {
+		fe.joy_status &= ~bit
+	}
+	set_joystick(0, fe.joy_status)
+	return true
 }
 
 @(private = "file")
@@ -363,9 +414,45 @@ insert_image :: proc(path: string, index: int) {
 @(private = "file")
 cleanup :: proc "c" () {
 	context = runtime.default_context()
+	// エミュレーションスレッドを止める。デバッガーでCPUが止まっていても外せるよう、先にデバッガーを閉じる
+	sync.atomic_store(&fe.running, false)
+	close_debugger()
+	if fe.emu_thread != nil {
+		thread.join(fe.emu_thread)
+		thread.destroy(fe.emu_thread)
+	}
 	if fe.opt.sound {
 		saudio.shutdown()
 	}
 	sgl.shutdown()
 	sg.shutdown()
+}
+
+// エミュレーションを一定の速さで進めるスレッド
+@(private = "file")
+emu_thread_proc :: proc() {
+	next := time.tick_now()
+	for sync.atomic_load(&fe.running) {
+		if sync.atomic_load(&fe.paused) {
+			time.sleep(5 * time.Millisecond)
+			next = time.tick_now()
+			continue
+		}
+		run()
+		sync.atomic_add(&fe.emu_frames, 1)
+
+		if !fe.opt.wait {
+			continue // 全速
+		}
+		// 速度比(%)を考慮した1フレームの時間
+		step := time.Duration(f64(time.Second) / frame_rate() * 100.0 / f64(fe.opt.speed))
+		next = time.tick_add(next, step)
+		now := time.tick_now()
+		behind := time.tick_diff(next, now) // nowがnextより進んでいれば正
+		if behind > 250 * time.Millisecond {
+			next = now // 遅れすぎたら追いつくのをあきらめる
+		} else if behind < 0 {
+			time.accurate_sleep(-behind)
+		}
+	}
 }

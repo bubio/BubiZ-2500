@@ -1027,6 +1027,13 @@ RESTART_GO:
 						}
 						p->osd->sleep(10);
 					}
+#elif defined(OSD_BUBIZ)
+					while(!p->request_terminate && !cpu_debugger->now_suspended) {
+						if(p->osd->is_console_key_pressed(VK_ESCAPE)) {
+							break;
+						}
+						p->osd->sleep(10);
+					}
 #elif defined(OSD_QT)
 					while(!p->request_terminate && !cpu_debugger->now_suspended) {
 						if(p->osd->console_input_string() != NULL) {
@@ -1623,6 +1630,8 @@ void EMU::open_debugger(int cpu_index)
 			debugger_thread_param.vm = vm;
 			debugger_thread_param.cpu_index = cpu_index;
 			debugger_thread_param.request_terminate = false;
+			// スレッドが走り出す前でも「実行中」とみなす(終了判定との競合を避ける)
+			debugger_thread_param.running = true;
 #ifdef _MSC_VER
 			if((hDebuggerThread = (HANDLE)_beginthreadex(NULL, 0, debugger_thread, &debugger_thread_param, 0, NULL)) != (HANDLE)0) {
 #else

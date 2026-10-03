@@ -40,6 +40,9 @@ main :: proc() {
 	defer destroy()
 
 	insert_media(opt)
+	if opt.debug {
+		open_debugger(0)
+	}
 	if opt.resume {
 		path := opt.resume_file if opt.resume_file != "" else fmt.tprintf("%s/mz2500.sta0", data_dir)
 		load_state(strings.clone_to_cstring(path, context.temp_allocator))
@@ -122,6 +125,15 @@ run_headless :: proc(opt: Options) {
 			}
 			if k.frame + k.hold == frame {
 				key_up(i32(k.vk))
+			}
+		}
+		for st in opt.states {
+			if st.frame == frame {
+				if st.load {
+					load_state_slot(i32(st.slot))
+				} else {
+					save_state_slot(i32(st.slot))
+				}
 			}
 		}
 		run()

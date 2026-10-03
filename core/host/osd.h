@@ -28,6 +28,11 @@ typedef int SOCKET;
 #define SCREEN_FILTER_RGB	1
 #define SCREEN_FILTER_RF	2
 
+#define OSD_CONSOLE_BLUE	1 // 文字色に青を含む
+#define OSD_CONSOLE_GREEN	2 // 文字色に緑を含む
+#define OSD_CONSOLE_RED		4 // 文字色に赤を含む
+#define OSD_CONSOLE_INTENSITY	8 // 文字色を強調する
+
 class FIFO;
 class FILEIO;
 
@@ -71,6 +76,9 @@ class OSD
 private:
 	int lock_count;
 	std::recursive_mutex vm_mutex;
+	bool console_open;
+	bool console_closed;
+	void* console_saved;	// 端末設定の退避先(実装側で確保)
 
 	// 入力
 	void initialize_input();
@@ -130,8 +138,26 @@ public:
 #ifdef USE_DEBUGGER
 	void start_waiting_in_debugger() {}
 	void finish_waiting_in_debugger() {}
-	void process_waiting_in_debugger() {}
+	// CPUがブレークで止まっている間、待機ループから繰り返し呼ばれる
+	void process_waiting_in_debugger();
+	// 待機中に呼ばれるフック(ウィンドウへ最新の画面を渡すためなどに使う)
+	void (*waiting_hook)();
 #endif
+
+	// common console（デバッガー用。端末の標準入出力を使う）
+	void open_console(int width, int height, const _TCHAR* title);
+	void close_console();
+	unsigned int get_console_code_page();
+	void set_console_text_attribute(unsigned short attr);
+	void write_console(const _TCHAR* buffer, unsigned int length);
+	int read_console_input(_TCHAR* buffer, unsigned int length);
+	bool is_console_key_pressed(int vk);
+	bool is_console_closed();
+	void close_debugger_console();
+	bool console_opened()
+	{
+		return console_open;
+	}
 
 	// common input
 	void update_input();

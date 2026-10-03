@@ -29,6 +29,13 @@ Key_Event :: struct {
 	hold:  int, // 押し続けるフレーム数
 }
 
+// ヘッドレス実行時に指定フレームでステートを保存/復元する(検証用)
+State_Event :: struct {
+	frame: int,
+	slot:  int,
+	load:  bool, // falseなら保存
+}
+
 // ヘッドレス実行時に指定フレームで画面を保存する(検証用)
 Shot_Event :: struct {
 	frame: int,
@@ -53,6 +60,7 @@ Options :: struct {
 	wav:           string, // headless中の音声を録音するWAV
 	keys:          [dynamic]Key_Event,
 	shots:         [dynamic]Shot_Event,
+	states:        [dynamic]State_Event,
 	// ディレクトリ
 	rom_dir:       string,
 	disk_dir:      string,
@@ -82,6 +90,7 @@ Options :: struct {
 	mouse:         bool,
 	joystick:      bool,
 	show_fps:      bool,
+	debug:         bool, // 起動時にデバッガーを開く
 	interp:        bool, // 拡大時に補間する(既定は最近傍)
 	resume:        bool,
 	resume_file:   string,
@@ -96,7 +105,6 @@ default_options :: proc() -> Options {
 		wait = true,
 		speed = 100,
 		sound = true,
-		joystick = true,
 		window_size = .Full,
 	}
 }
@@ -350,6 +358,8 @@ parse_args :: proc(args: []string) -> (opt: Options, err: string) {
 			opt.joystick = true
 		case "-nojoystick", "-nouse_joy":
 			opt.joystick = false
+		case "-debug", "-monitor_mode":
+			opt.debug = true
 		case "-interp":
 			opt.interp = true
 		case "-nointerp":
@@ -378,6 +388,21 @@ parse_args :: proc(args: []string) -> (opt: Options, err: string) {
 			ev, kerr := parse_key_event(v)
 			if kerr != "" {return opt, kerr}
 			append(&opt.keys, ev)
+		case "-savestate", "-loadstate":
+			// -savestate <frame>:<slot>  -loadstate <frame>:<slot>  (-headless中)
+			v, ok := take_value(args, &i, name)
+			if !ok {return opt, fmt.aprintf("オプション %s には値が必要です", name)}
+			parts := strings.split(v, ":", context.temp_allocator)
+			frame, slot := 0, 0
+			ok1, ok2 := false, false
+			if len(parts) == 2 {
+				frame, ok1 = strconv.parse_int(parts[0])
+				slot, ok2 = strconv.parse_int(parts[1])
+			}
+			if !ok1 || !ok2 || frame < 0 || slot < 0 {
+				return opt, fmt.aprintf("オプション %s の書式は <frame>:<slot> です: %s", name, v)
+			}
+			append(&opt.states, State_Event{frame = frame, slot = slot, load = name == "-loadstate"})
 		case "-shotat":
 			// -shotat <frame>:<file>  指定フレームで画面をBMP保存
 			v, ok := take_value(args, &i, name)
@@ -439,9 +464,10 @@ usage :: proc() {
 	fmt.println("  -sound | -nosound   サウンドの有無")
 	fmt.println("  -samplefreq <hz>    サンプリング周波数")
 	fmt.println("  -mouse | -nomouse   マウスのエミュレート")
-	fmt.println("  -joystick | -nojoystick   ジョイスティックのエミュレート")
+	fmt.println("  -joystick | -nojoystick   キーボードによるジョイスティックで起動する / しない(既定: しない)")
 	fmt.println("  -interp | -nointerp       画面の拡大時に補間する / しない(既定: しない)")
 	fmt.println("  -show_fps | -hide_fps     ウィンドウタイトルにFPS(エミュレーション速度)を表示")
+	fmt.println("  -debug              起動時にデバッガーを開く(端末の標準入出力を使う。'?'でコマンド一覧)")
 	fmt.println("  -resume             起動時にステートをロード")
 	fmt.println("  -resumefile <file>  起動時に指定ステートをロード")
 	fmt.println()
@@ -450,6 +476,10 @@ usage :: proc() {
 	fmt.println("    F12          リセット (Ctrl+F12: スペシャルリセット)")
 	fmt.println("    Ctrl+P       一時停止 / 再開")
 	fmt.println("    Ctrl+S       スクリーンショットを保存(データディレクトリへBMP)")
+	fmt.println("    Ctrl+F1〜F4        ステートを保存(スロット1〜4)")
+	fmt.println("    Ctrl+Shift+F1〜F4  ステートを復元(スロット1〜4)")
+	fmt.println("    Ctrl+J       キーボードによるジョイスティックの切り替え(矢印キー=方向, Z=ボタン1, X=ボタン2)")
+	fmt.println("    Ctrl+D       デバッガーを開く(端末の標準入出力を使う)")
 	fmt.println("    Ctrl+M       マウスのキャプチャ切り替え(-mouse指定時は最初のクリックでも開始)")
 	fmt.println("    ドラッグ&ドロップ  ディスクイメージ・テープ・ハードディスクを挿入")
 	fmt.println()
@@ -459,6 +489,8 @@ usage :: proc() {
 	fmt.println("                      key: 英数字1文字 / RETURN SPACE ESC TAB BS UP DOWN LEFT RIGHT F1-F12 SHIFT CTRL ...")
 	fmt.println("                      hold: 押し続けるフレーム数(既定3)")
 	fmt.println("  -wav <file>         -headless中の音声をWAVで録音(-nosoundと併用不可)")
+	fmt.println("  -savestate <frame>:<slot>  -headless中、指定フレームでステートを保存(スロット番号は0から)")
+	fmt.println("  -loadstate <frame>:<slot>  -headless中、指定フレームでステートを復元")
 	fmt.println("  -shotat <frame>:<file>  -headless中、指定フレームの画面をBMPで保存(複数指定可)")
 }
 

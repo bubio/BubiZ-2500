@@ -40,6 +40,7 @@ foreign core {
 	screen_size :: proc(width, height: ^c.int) ---
 	screen_aspect :: proc(width, height: ^c.int) ---
 	read_screen_rgba :: proc(out_pixels: [^]u8) ---
+	copy_frame :: proc(out_pixels: [^]u8, width, height: c.int, seq: ^u64) -> bool ---
 
 	sound_rate :: proc() -> c.int ---
 	pull_sound :: proc(dest: [^]i16, frames: c.size_t) -> c.size_t ---
@@ -65,12 +66,18 @@ foreign core {
 
 	save_state :: proc(path: cstring) ---
 	load_state :: proc(path: cstring) ---
+	save_state_slot :: proc(slot: c.int) ---
+	load_state_slot :: proc(slot: c.int) ---
 
 	capture_screen :: proc() ---
 	write_screenshot :: proc(path: cstring) -> bool ---
 	start_record_sound :: proc() ---
 	start_record_sound_to :: proc(path: cstring) -> bool ---
 	stop_record_sound :: proc() ---
+
+	open_debugger :: proc(cpu_index: c.int) ---
+	close_debugger :: proc() ---
+	debugger_active :: proc() -> bool ---
 
 	power_off_requested :: proc() -> bool ---
 }

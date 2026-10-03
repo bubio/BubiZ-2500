@@ -27,6 +27,12 @@ OSD::OSD()
 	lock_count = 0;
 	vm = NULL;
 	power_off_requested = false;
+	console_open = false;
+	console_closed = false;
+	console_saved = NULL;
+#ifdef USE_DEBUGGER
+	waiting_hook = NULL;
+#endif
 	now_record_video = now_record_sound = false;
 	rec_sound_fio = NULL;
 	rec_sound_bytes = 0;

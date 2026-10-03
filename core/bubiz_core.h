@@ -32,13 +32,17 @@ bool bubiz_set_config(const char *key, int value);
 bool bubiz_create(void);
 void bubiz_destroy(void);
 
-// エミュレーション駆動: 1フレーム進める。返り値は実行したフレーム数
+// エミュレーション駆動: 1フレーム進める。返り値は実行したフレーム数。
+// 1つのスレッドから呼ぶこと。入力・メディア操作などの他の呼び出しは別スレッドから呼んでよく、
+// 次の bubiz_run() の冒頭で反映される。デバッガーでCPUが止まっている間は、この関数が戻らない。
 int bubiz_run(void);
 double bubiz_frame_rate(void);
 const char *bubiz_device_name(void);
 
-// 画面: 描画してRGBA8(メモリ上R,G,B,Aの順)に変換した画素を返す。
-// out_pixelsはbubiz_screen_size()で得た幅*高さ*4バイト以上の領域。
+// 画面: bubiz_run() が描画した最新のフレームを、RGBA8(メモリ上R,G,B,Aの順)で取り出す。
+// bubiz_copy_frame() はどのスレッドからでも呼べる。幅・高さが現在の画面と違えばfalseを返す。
+bool bubiz_copy_frame(uint8_t *out_pixels, int width, int height, uint64_t *seq);
+// 互換用(何もしない)。描画は bubiz_run() の中で行われる
 void bubiz_draw_screen(void);
 void bubiz_screen_size(int *width, int *height);
 void bubiz_screen_aspect(int *width, int *height);
@@ -73,6 +77,8 @@ void bubiz_close_tape(int drive);
 // ステート
 void bubiz_save_state(const char *path);
 void bubiz_load_state(const char *path);
+void bubiz_save_state_slot(int slot);	// データディレクトリの mz2500.sta<slot> に保存
+void bubiz_load_state_slot(int slot);
 
 // 録画・キャプチャ
 void bubiz_capture_screen(void);
@@ -80,6 +86,12 @@ bool bubiz_write_screenshot(const char *path);	// 現在の画面をBMPで保存
 void bubiz_start_record_sound(void);
 bool bubiz_start_record_sound_to(const char *path);	// 指定パスへWAV録音を開始
 void bubiz_stop_record_sound(void);
+
+// デバッガー(端末の標準入出力を使うコンソール)。cpu_indexは0がメインCPU。
+// 開いたあとCPUはブレークし、端末で '?' を入力するとコマンド一覧が表示される。
+void bubiz_open_debugger(int cpu_index);
+void bubiz_close_debugger(void);
+bool bubiz_debugger_active(void);
 
 // 電源オフ要求(ゲストが要求した場合)の有無
 bool bubiz_power_off_requested(void);

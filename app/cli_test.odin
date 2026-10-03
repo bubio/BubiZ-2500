@@ -64,3 +64,20 @@ test_key_event :: proc(t: ^testing.T) {
 	testing.expect_value(t, vk_from_name("f10"), 0x79)
 	testing.expect_value(t, vk_from_name("a"), 'A')
 }
+
+@(test)
+test_debug_and_state_options :: proc(t: ^testing.T) {
+	opt, err := parse_args({"-debug", "-savestate", "100:2", "-loadstate", "200:2", "-joystick"})
+	testing.expect_value(t, err, "")
+	testing.expect_value(t, opt.debug, true)
+	testing.expect_value(t, opt.joystick, true)
+	testing.expect_value(t, len(opt.states), 2)
+	testing.expect_value(t, opt.states[0], State_Event{frame = 100, slot = 2, load = false})
+	testing.expect_value(t, opt.states[1], State_Event{frame = 200, slot = 2, load = true})
+	delete(opt.states)
+
+	_, err = parse_args({"-savestate", "abc"})
+	testing.expect(t, err != "", "書式が不正ならエラー")
+	opt2, _ := parse_args({})
+	testing.expect_value(t, opt2.joystick, false)
+}

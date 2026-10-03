@@ -53,9 +53,7 @@
 #define USE_MOUSE
 #define USE_PRINTER
 #define USE_PRINTER_TYPE	4
-#ifndef BUBIZ_HOST
 #define USE_DEBUGGER
-#endif
 #define USE_STATE
 
 #define OPTION_SWITCH_CMU800	(1 << 0)
