@@ -9,6 +9,8 @@ import "core:sync"
 import "core:thread"
 import "core:time"
 
+import "core:image/png"
+
 import sapp "sokol:app"
 import saudio "sokol:audio"
 import sg "sokol:gfx"
@@ -53,6 +55,47 @@ Frontend :: struct {
 
 fe: Frontend
 
+// ウィンドウのアイコン(packaging/icons/bubiz.png を実行ファイルに埋め込む)。
+// macOSは、アプリのバンドルに入れたアイコンをDockが使う。ここで指定するとsokolの既定アイコンで上書きされるため、何も指定しない
+ICON_PNG := #load("../packaging/icons/bubiz.png")
+
+window_icon :: proc() -> sapp.Icon_Desc {
+	icon: sapp.Icon_Desc
+	when ODIN_OS != .Darwin {
+		img, err := png.load_from_bytes(ICON_PNG, {.alpha_add_if_missing}, context.allocator)
+		if err == nil && img != nil && img.channels == 4 && img.depth == 8 && len(img.pixels.buf) >= img.width * img.height * 4 {
+			// 大きい画像はX11などで受け付けられないことがあるため、128・64・32に縮小して渡す。
+			// 画素はsokolが初期化時に使うため、解放せずに残す
+			src := img.pixels.buf[:]
+			sizes := [3]int{128, 64, 32}
+			for size, n in sizes {
+				px := make([]u8, size * size * 4)
+				factor := img.width / size
+				for y in 0 ..< size {
+					for x in 0 ..< size {
+						sum: [4]int
+						for yy in 0 ..< factor {
+							for xx in 0 ..< factor {
+								o := ((y * factor + yy) * img.width + (x * factor + xx)) * 4
+								for c in 0 ..< 4 {
+									sum[c] += int(src[o + c])
+								}
+							}
+						}
+						for c in 0 ..< 4 {
+							px[(y * size + x) * 4 + c] = u8(sum[c] / (factor * factor))
+						}
+					}
+				}
+				icon.images[n] = {width = i32(size), height = i32(size), pixels = {ptr = raw_data(px), size = uint(len(px))}}
+			}
+			return icon
+		}
+		icon.sokol_default = true
+	}
+	return icon
+}
+
 run_frontend :: proc(opt: Options) {
 	fe.opt = opt
 
@@ -86,7 +129,7 @@ run_frontend :: proc(opt: Options) {
 			enable_dragndrop = true,
 			max_dropped_files = 4,
 			logger = {func = slog.func},
-			icon = {sokol_default = true},
+			icon = window_icon(),
 		},
 	)
 }
@@ -363,6 +406,13 @@ draw_quad :: proc() {
 event :: proc "c" (e: ^sapp.Event) {
 	context = runtime.default_context()
 
+	// macOS: Command+Qで終了する(sokolはアプリケーションメニューを作らないため、自前で扱う)
+	when ODIN_OS == .Darwin {
+		if e.type == .KEY_DOWN && e.key_code == .Q && (e.modifiers & sapp.MODIFIER_SUPER) != 0 {
+			sapp.request_quit()
+			return
+		}
+	}
 	// メニューなどGUIが使うイベントはエミュレーションへ渡さない
 	if gui_event(e) {
 		return
