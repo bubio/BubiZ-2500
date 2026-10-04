@@ -159,9 +159,19 @@ bool FILEIO::Fopen(const _TCHAR *file_path, int mode)
 #endif
 	switch(mode) {
 	case FILEIO_READ_BINARY:
-		return ((fp = _tfopen(file_path, _T("rb"))) != NULL);
+		if((fp = _tfopen(file_path, _T("rb"))) == NULL) {
+			return false;
+		}
+		// ステート等の細かい入出力を速くするため大きなバッファ
+		setvbuf(fp, NULL, _IOFBF, 1 << 20);
+		return true;
 	case FILEIO_WRITE_BINARY:
-		return ((fp = _tfopen(file_path, _T("wb"))) != NULL);
+		if((fp = _tfopen(file_path, _T("wb"))) == NULL) {
+			return false;
+		}
+		// ステート等の細かい入出力を速くするため大きなバッファ
+		setvbuf(fp, NULL, _IOFBF, 1 << 20);
+		return true;
 	case FILEIO_READ_WRITE_BINARY:
 		return ((fp = _tfopen(file_path, _T("r+b"))) != NULL);
 	case FILEIO_READ_WRITE_NEW_BINARY:

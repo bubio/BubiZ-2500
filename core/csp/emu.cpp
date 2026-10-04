@@ -3106,12 +3106,11 @@ void EMU::load_state(const _TCHAR* file_path)
 		config.romaji_to_kana = false;
 #endif
 		
-		save_state(create_local_path(_T("$temp$.sta")));
+		// 速度優先のため退避保存は行わず、失敗時はリセット
 		if(!load_state_tmp(file_path)) {
 			out_debug_log(_T("failed to load state file\n"));
-			load_state_tmp(create_local_path(_T("$temp$.sta")));
+			reset();
 		}
-		FILEIO::RemoveFile(create_local_path(_T("$temp$.sta")));
 	}
 }
 

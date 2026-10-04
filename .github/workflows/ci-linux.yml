@@ -59,10 +59,24 @@ jobs:
       - name: 配布物の名前
         id: artifact
         run: echo "name=$(scripts/artifact-name.sh)" >> "$GITHUB_OUTPUT"
-      - name: 配布物のアップロード
+      - name: 配布物のアップロード (deb)
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.artifact.outputs.name }}
-          path: dist/*
+          name: ${{ steps.artifact.outputs.name }}-deb
+          path: dist/*.deb
+          if-no-files-found: error
+          retention-days: 14
+      - name: 配布物のアップロード (rpm)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact.outputs.name }}-rpm
+          path: dist/*.rpm
+          if-no-files-found: error
+          retention-days: 14
+      - name: 配布物のアップロード (AppImage)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact.outputs.name }}-AppImage
+          path: dist/*.AppImage
           if-no-files-found: error
           retention-days: 14
