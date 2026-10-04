@@ -66,6 +66,7 @@ Options :: struct {
 	disk_dir:      string,
 	tape_dir:      string,
 	snap_dir:      string,
+	sound_dir:     string, // 録音(WAV)の保存先(空ならOS標準のミュージック)
 	state_dir:     string,
 	// イメージ
 	floppies:      [FLOPPY_DRIVES]Image_Arg,
@@ -285,6 +286,10 @@ parse_args :: proc(args: []string) -> (opt: Options, err: string) {
 			v, ok := take_value(args, &i, name)
 			if !ok {return opt, "オプション -tapedir には値が必要です"}
 			opt.tape_dir = v
+		case "-sounddir":
+			v, ok := take_value(args, &i, name)
+			if !ok {return opt, "オプション -sounddir には値が必要です"}
+			opt.sound_dir = v
 		case "-snapdir":
 			v, ok := take_value(args, &i, name)
 			if !ok {return opt, "オプション -snapdir には値が必要です"}
@@ -466,6 +471,7 @@ usage :: proc() {
 	fmt.println("  -romdir <path>      BIOS ROM・設定・ステートのディレクトリ")
 	fmt.println("  -diskdir <path>     ディスクイメージのディレクトリ")
 	fmt.println("  -tapedir <path>     テープイメージのディレクトリ")
+	fmt.println("  -sounddir <path>    録音(WAV)の保存先(既定: ミュージック/BubiZ-2500)")
 	fmt.println("  -snapdir <path>     スクリーンショットの保存先(既定: ピクチャ/BubiZ-2500)")
 	fmt.println("  -statedir <path>    ステート保存先")
 	fmt.println("  -noconfig           設定ファイルを読み込まない")

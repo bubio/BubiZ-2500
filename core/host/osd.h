@@ -73,6 +73,8 @@ typedef struct pen_s {
 
 // スクリーンショットの保存先ディレクトリ(空ならデータディレクトリ)
 extern std::string g_snap_dir;
+// 録音(Rec Sound)の保存先ディレクトリ(空ならデータディレクトリ)
+extern std::string g_sound_dir;
 
 class OSD
 {

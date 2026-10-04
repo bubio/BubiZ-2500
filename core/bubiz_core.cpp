@@ -10,6 +10,10 @@
 */
 
 #include <stdio.h>
+#include <math.h>
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 #include <time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -113,6 +117,14 @@ void bubiz_set_snap_dir(const char *dir)
 	}
 }
 
+void bubiz_set_sound_dir(const char *dir)
+{
+	g_sound_dir = dir ? dir : "";
+	while(!g_sound_dir.empty() && (g_sound_dir.back() == '/' || g_sound_dir.back() == '\\')) {
+		g_sound_dir.pop_back();
+	}
+}
+
 void bubiz_load_config(const char *name)
 {
 	// 設定ファイルが無ければ既定値で初期化される
@@ -148,8 +160,104 @@ static void waiting_hook()
 	publish_frame();
 }
 
+// FDD/CMTの動作音のWAV(専用のファイルが必要)。データディレクトリに無ければ合成して作る
+namespace {
+struct NoiseRng {
+	uint32_t x = 12345;
+	double next()
+	{
+		x = x * 1664525u + 1013904223u;
+		return ((x >> 9) & 0xFFFF) / 32768.0 - 1.0;
+	}
+};
+
+const int NOISE_RATE = 44100;
+
+// 減衰する雑音と正弦波の合成。tは秒、tauは減衰の時定数
+double click_at(double t, NoiseRng &rng, double noise_amp, double noise_tau, double tone_hz, double tone_amp, double tone_tau)
+{
+	if(t < 0) {
+		return 0;
+	}
+	return rng.next() * noise_amp * exp(-t / noise_tau) + sin(2 * M_PI * tone_hz * t) * tone_amp * exp(-t / tone_tau);
+}
+
+void write_noise_wav(const char *name, const std::vector<int16_t> &pcm)
+{
+	std::string path = create_local_path(name);
+	FILE *fp = fopen(path.c_str(), "wb");
+	if(fp == NULL) {
+		return;
+	}
+	uint32_t data_size = (uint32_t)(pcm.size() * 2);
+	uint8_t h[44] = {0};
+	memcpy(h, "RIFF", 4);
+	uint32_t v32 = 36 + data_size; memcpy(h + 4, &v32, 4);
+	memcpy(h + 8, "WAVEfmt ", 8);
+	v32 = 16; memcpy(h + 16, &v32, 4);
+	uint16_t v16 = 1; memcpy(h + 20, &v16, 2);	// PCM
+	v16 = 1; memcpy(h + 22, &v16, 2);	// モノラル
+	v32 = NOISE_RATE; memcpy(h + 24, &v32, 4);
+	v32 = NOISE_RATE * 2; memcpy(h + 28, &v32, 4);
+	v16 = 2; memcpy(h + 32, &v16, 2);
+	v16 = 16; memcpy(h + 34, &v16, 2);
+	memcpy(h + 36, "data", 4);
+	memcpy(h + 40, &data_size, 4);
+	fwrite(h, 1, 44, fp);
+	fwrite(pcm.data(), 2, pcm.size(), fp);
+	fclose(fp);
+}
+
+bool noise_wav_exists(const char *name)
+{
+	FILE *fp = fopen(create_local_path(name), "rb");
+	if(fp == NULL) {
+		return false;
+	}
+	fclose(fp);
+	return true;
+}
+
+template <typename F>
+void make_noise_wav(const char *name, double seconds, F gen)
+{
+	if(noise_wav_exists(name)) {
+		return;
+	}
+	NoiseRng rng;
+	std::vector<int16_t> pcm((size_t)(seconds * NOISE_RATE));
+	for(size_t i = 0; i < pcm.size(); i++) {
+		double v = gen((double)i / NOISE_RATE, rng);
+		if(v > 1.0) v = 1.0;
+		if(v < -1.0) v = -1.0;
+		pcm[i] = (int16_t)(v * 0.7 * 32767);
+	}
+	write_noise_wav(name, pcm);
+}
+}
+
+static void ensure_noise_wavs(void)
+{
+	// ステッピングモーターのカチッという音
+	make_noise_wav("FDDSEEK.WAV", 0.05, [](double t, NoiseRng &r) { return click_at(t, r, 0.5, 0.004, 220, 0.5, 0.012); });
+	// ヘッドが下りる/上がる音
+	make_noise_wav("HEADDOWN.WAV", 0.08, [](double t, NoiseRng &r) { return click_at(t, r, 0.3, 0.003, 110, 0.6, 0.02); });
+	make_noise_wav("HEADUP.WAV", 0.06, [](double t, NoiseRng &r) { return click_at(t, r, 0.25, 0.002, 160, 0.4, 0.015); });
+	// データレコーダーのリレー(再生/停止)の音
+	make_noise_wav("RELAY_ON.WAV", 0.06, [](double t, NoiseRng &r) {
+		return click_at(t, r, 0.7, 0.0015, 1800, 0.2, 0.003) + click_at(t - 0.012, r, 0.5, 0.0015, 1500, 0.15, 0.003);
+	});
+	make_noise_wav("RELAYOFF.WAV", 0.04, [](double t, NoiseRng &r) { return click_at(t, r, 0.5, 0.0015, 1500, 0.15, 0.003); });
+	// 早送り/早戻しのモーター音(繰り返して使われる。周期の整数倍の長さにして継ぎ目を目立たせない)
+	make_noise_wav("FAST_FWD.WAV", 0.6, [](double t, NoiseRng &r) {
+		double am = 0.75 + 0.25 * sin(2 * M_PI * 25 * t);
+		return (sin(2 * M_PI * 80 * t) * 0.18 + r.next() * 0.12) * am;
+	});
+}
+
 bool bubiz_create(void)
 {
+	ensure_noise_wavs();
 	if(g_emu != NULL) {
 		return true;
 	}

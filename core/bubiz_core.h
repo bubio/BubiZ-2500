@@ -20,6 +20,8 @@ extern "C" {
 void bubiz_set_data_dir(const char *dir);
 // スクリーンショットの保存先(空ならデータディレクトリ)
 void bubiz_set_snap_dir(const char *dir);
+// 録音(WAV)の保存先(空ならデータディレクトリ)
+void bubiz_set_sound_dir(const char *dir);
 
 // 設定ファイル(データディレクトリ内の相対名)を読む。無ければ既定値。bubiz_createより前に呼べる。
 void bubiz_load_config(const char *name);

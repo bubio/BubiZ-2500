@@ -498,6 +498,7 @@ draw_host_menu :: proc() {
 	item("Rec Movie 30fps", nil, false, false)
 	item("Rec Movie 15fps", nil, false, false)
 	if item("Rec Sound") {
+		ensure_dir(fe.opt.sound_dir if fe.opt.sound_dir != "" else default_sound_dir())
 		start_record_sound()
 	}
 	if item("Stop") {
@@ -508,29 +509,24 @@ draw_host_menu :: proc() {
 	}
 	igSeparator()
 	if menu("Screen") {
-		if item("Window x1", nil, false) {
-			set_window_scale(1)
+		// 元の実装と同じ並びと表記
+		for scale, idx in WINDOW_SCALES {
+			label := fmt.ctprintf("Window x%s", scale_label(scale))
+			if item(label, nil, !sapp.is_fullscreen() && opt_get("window_mode") == idx) {
+				set_window_scale(idx)
+			}
 		}
-		if item("Window x2", nil, false) {
-			set_window_scale(2)
-		}
-		if item("Window x3", nil, false) {
-			set_window_scale(3)
-		}
-		if item("Window x4", nil, false) {
-			set_window_scale(4)
-		}
-		if item("Fullscreen 640x400", "F11", sapp.is_fullscreen()) {
+		if item("Fullscreen", "F11", false) {
 			sapp.toggle_fullscreen()
 		}
 		igSeparator()
-		radio("Window Stretch 1", "window_stretch_type", 0)
-		radio("Window Stretch 2", "window_stretch_type", 1)
+		radio("Window: Aspect Ratio 640:400", "window_stretch_type", 0)
+		radio("Window: Aspect Ratio 640:480", "window_stretch_type", 1)
 		igSeparator()
-		radio("Fullscreen Stretch 1", "fullscreen_stretch_type", 0)
-		radio("Fullscreen Stretch 2", "fullscreen_stretch_type", 1)
-		radio("Fullscreen Stretch 3", "fullscreen_stretch_type", 2)
-		radio("Fullscreen Stretch 4", "fullscreen_stretch_type", 3)
+		radio("Fullscreen: Dot By Dot", "fullscreen_stretch_type", 0)
+		radio("Fullscreen: Stretch (Aspect Ratio 640:400)", "fullscreen_stretch_type", 1)
+		radio("Fullscreen: Stretch (Aspect Ratio 640:480)", "fullscreen_stretch_type", 2)
+		radio("Fullscreen: Stretch (Fill)", "fullscreen_stretch_type", 3)
 		igSeparator()
 		radio("Rotate 0deg", "rotate_type", 0)
 		radio("Rotate +90deg", "rotate_type", 1)
@@ -688,19 +684,30 @@ draw_status_bar :: proc() {
 // ウィンドウサイズ
 // ---------------------------------------------------------------------------
 
-// エミュレーション画面が等倍の何倍になるようにウィンドウを変えるか
+// ウィンドウの倍率の選択肢(Window x1 / x1.5 / x2 / x3)。設定window_modeはこの添字
+WINDOW_SCALES := [4]f32{1, 1.5, 2, 3}
+
 @(private = "file")
-set_window_scale :: proc(n: int) {
+scale_label :: proc(scale: f32) -> string {
+	if scale == f32(int(scale)) {
+		return fmt.tprintf("%d", int(scale))
+	}
+	return fmt.tprintf("%.1f", scale)
+}
+
+// 倍率の選択肢idxになるようにウィンドウの大きさを変える
+@(private = "file")
+set_window_scale :: proc(idx: int) {
 	if sapp.is_fullscreen() {
 		return
 	}
-	set_option("window_mode", i32(n - 1))
-	w, h := window_size_for_scale(n)
+	set_option("window_mode", i32(idx))
+	w, h := window_size_for_scale(WINDOW_SCALES[idx])
 	native_resize_window(w, h)
 }
 
 // 倍率nのときのウィンドウの内側の大きさ(論理座標)
-window_size_for_scale :: proc(n: int) -> (w, h: i32) {
+window_size_for_scale :: proc(n: f32) -> (w, h: i32) {
 	base_h := 480 if opt_get("window_stretch_type") == 1 else 400
 	sw, sh := 640, base_h
 	if opt_get("rotate_type") == 1 || opt_get("rotate_type") == 3 {
@@ -710,7 +717,7 @@ window_size_for_scale :: proc(n: int) -> (w, h: i32) {
 	if get_option("show_status_bar") != 0 {
 		status = STATUS_HEIGHT_LOGICAL
 	}
-	return i32(sw * n), i32(sh * n + MENU_HEIGHT_LOGICAL + status)
+	return i32(f32(sw) * n), i32(f32(sh) * n) + MENU_HEIGHT_LOGICAL + i32(status)
 }
 
 // ---------------------------------------------------------------------------

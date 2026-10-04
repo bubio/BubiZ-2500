@@ -383,6 +383,7 @@ int OSD::draw_screen()
 }
 
 std::string g_snap_dir;
+std::string g_sound_dir;
 
 void OSD::capture_screen()
 {
@@ -497,7 +498,12 @@ void OSD::start_record_sound(const _TCHAR* path)
 			time_t t = time(NULL);
 			struct tm *lt = localtime(&t);
 			my_stprintf_s(sound_file_path, _MAX_PATH, _T("%04d-%02d-%02d_%02d-%02d-%02d.wav"), lt->tm_year + 1900, lt->tm_mon + 1, lt->tm_mday, lt->tm_hour, lt->tm_min, lt->tm_sec);
-			my_tcscpy_s(full_path, _MAX_PATH, create_local_path(sound_file_path));
+			if(!g_sound_dir.empty()) {
+				std::string p = g_sound_dir + (char)'/' + sound_file_path;
+				my_tcscpy_s(full_path, _MAX_PATH, p.c_str());
+			} else {
+				my_tcscpy_s(full_path, _MAX_PATH, create_local_path(sound_file_path));
+			}
 		}
 		rec_sound_fio = new FILEIO();
 		if(rec_sound_fio->Fopen(full_path, FILEIO_WRITE_BINARY)) {

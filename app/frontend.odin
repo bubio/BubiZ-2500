@@ -57,15 +57,15 @@ run_frontend :: proc(opt: Options) {
 	fe.opt = opt
 
 	// 設定の倍率(window_mode)でウィンドウの大きさを決める。-half / -double は上書き
-	scale := max(1, get_option("window_mode") + 1)
-	w, h := window_size_for_scale(int(scale))
+	mode := clamp(int(get_option("window_mode")), 0, len(WINDOW_SCALES) - 1)
+	w, h := window_size_for_scale(WINDOW_SCALES[mode])
 	switch opt.window_size {
 	case .Full:
 	case .Half:
-		w, h = window_size_for_scale(1)
+		w, h = window_size_for_scale(1.0)
 		w, h = w / 2, (h - MENU_HEIGHT_LOGICAL - STATUS_HEIGHT_LOGICAL) / 2 + MENU_HEIGHT_LOGICAL + STATUS_HEIGHT_LOGICAL
 	case .Double:
-		w, h = window_size_for_scale(2)
+		w, h = window_size_for_scale(2.0)
 	}
 	if opt.width > 0 {w = i32(opt.width)}
 	if opt.height > 0 {h = i32(opt.height)}
