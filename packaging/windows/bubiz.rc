@@ -1,0 +1,3 @@
+// Windows用リソース: エクスプローラーに表示するアイコンと、UTF-8のパスを扱うためのマニフェスト
+1 ICON "bubiz.ico"
+1 24 "bubiz.manifest"

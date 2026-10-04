@@ -1,0 +1,53 @@
+name: Release (Linux)
+
+# release.yml から呼ばれる。単体でも手動実行できる(配布物をartifactとして得るだけで公開はしない)
+on:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            arch: amd64
+          - runner: ubuntu-22.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: 依存パッケージ
+        run: |
+          # Ubuntu 22.04標準のLLVMは古い(Odinは17以上が必要)ため、apt.llvm.orgから入れる
+          wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          chmod +x /tmp/llvm.sh
+          sudo /tmp/llvm.sh 18
+          sudo apt-get update
+          sudo apt-get install -y cmake rpm llvm-18-dev libgl-dev libasound2-dev libx11-dev libxi-dev libxcursor-dev
+      - name: Odinをビルド
+        run: |
+          # mise.tomlで固定したバージョンのタグを取得する
+          git clone --depth 1 --branch "$(scripts/odin-version.sh)" https://github.com/odin-lang/Odin "$HOME/odin"
+          cd "$HOME/odin"
+          LLVM_CONFIG=llvm-config-18 CXX=clang++-18 ./build_odin.sh release
+          echo "$HOME/odin" >> "$GITHUB_PATH"
+      - name: セットアップ
+        run: scripts/setup.sh
+      - name: ビルド
+        run: scripts/build.sh release
+      - name: 動作確認
+        run: build/bin/BubiZ-2500 -headless 60 -nosound
+      - name: 配布物の作成(deb / rpm / AppImage)
+        env:
+          BUILD_NUMBER: 1
+        run: scripts/package-linux.sh all
+      - name: 配布物の名前
+        id: artifact
+        run: echo "name=$(scripts/artifact-name.sh)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ steps.artifact.outputs.name }}
+          path: dist/*
+          if-no-files-found: error

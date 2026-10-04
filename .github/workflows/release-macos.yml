@@ -1,0 +1,44 @@
+name: Release (macOS)
+
+# release.yml から呼ばれる。単体でも手動実行できる(配布物をartifactとして得るだけで公開はしない)
+on:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        # macos-14: Apple Silicon / macos-15-intel: Intel
+        os: [macos-14, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Odinのバージョン(mise.tomlで固定)
+        id: odin
+        run: echo "version=$(scripts/odin-version.sh)" >> "$GITHUB_OUTPUT"
+      - uses: laytan/setup-odin@v2
+        with:
+          release: ${{ steps.odin.outputs.version }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: セットアップ
+        run: scripts/setup.sh
+      - name: ビルド
+        run: scripts/build.sh release
+      - name: 最低対応OS(14.0)の確認
+        run: scripts/check-macos-min-version.sh
+      - name: 動作確認
+        run: build/bin/BubiZ-2500 -headless 60 -nosound
+      - name: 配布物の作成(dmg)
+        env:
+          BUILD_NUMBER: 1
+        run: scripts/package-macos.sh
+      - name: 配布物の名前
+        id: artifact
+        run: echo "name=$(scripts/artifact-name.sh)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ steps.artifact.outputs.name }}
+          path: dist/*
+          if-no-files-found: error

@@ -1,0 +1,87 @@
+name: CI (Linux)
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    # ビルドに関係するファイルが変わったときだけ実行する
+    paths:
+      - "core/**"
+      - "gui/**"
+      - "app/**"
+      - "scripts/**"
+      - "packaging/**"
+      - "mise.toml"
+      - ".github/workflows/ci-linux.yml"
+  pull_request:
+    paths:
+      - "core/**"
+      - "gui/**"
+      - "app/**"
+      - "scripts/**"
+      - "packaging/**"
+      - "mise.toml"
+      - ".github/workflows/ci-linux.yml"
+
+jobs:
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-22.04, ubuntu-22.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: 依存パッケージ
+        run: |
+          # Ubuntu 22.04標準のLLVMは古い(Odinは17以上が必要)ため、apt.llvm.orgから入れる
+          wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          chmod +x /tmp/llvm.sh
+          sudo /tmp/llvm.sh 18
+          sudo apt-get update
+          sudo apt-get install -y cmake rpm llvm-18-dev libgl-dev libasound2-dev libx11-dev libxi-dev libxcursor-dev
+      - name: Odinをビルド
+        run: |
+          # mise.tomlで固定したバージョンのタグを取得する
+          git clone --depth 1 --branch "$(scripts/odin-version.sh)" https://github.com/odin-lang/Odin "$HOME/odin"
+          cd "$HOME/odin"
+          LLVM_CONFIG=llvm-config-18 CXX=clang++-18 ./build_odin.sh release
+          echo "$HOME/odin" >> "$GITHUB_PATH"
+      - name: セットアップ
+        run: scripts/setup.sh
+      - name: ビルド
+        run: scripts/build.sh release
+      - name: CLIの単体テスト
+        run: odin test app -collection:sokol=.tools/sokol-odin/sokol -extra-linker-flags:"-Lbuild/core" -out:build/apptest
+      - name: 動作確認（ウィンドウ無しで実行）
+        run: build/bin/BubiZ-2500 -headless 60 -nosound
+      - name: コアの煙テスト
+        run: build/core/bubiz_smoke "$RUNNER_TEMP/"
+      - name: 配布物の作成(deb / rpm / AppImage)
+        run: scripts/package-linux.sh all
+      - name: 配布物の名前(アーティファクト名は中のファイル名と一致させる)
+        id: artifact
+        run: |
+          for ext in deb rpm AppImage; do
+            echo "$ext=$(basename dist/*.$ext)" >> "$GITHUB_OUTPUT"
+          done
+      - name: 配布物のアップロード (deb)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact.outputs.deb }}
+          path: dist/*.deb
+          if-no-files-found: error
+          retention-days: 14
+      - name: 配布物のアップロード (rpm)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact.outputs.rpm }}
+          path: dist/*.rpm
+          if-no-files-found: error
+          retention-days: 14
+      - name: 配布物のアップロード (AppImage)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact.outputs.AppImage }}
+          path: dist/*.AppImage
+          if-no-files-found: error
+          retention-days: 14

@@ -1,0 +1,170 @@
+/*
+	BubiZ-2500 コアC API
+	エミュレーションコア(CSP EmuZ-2500)をアプリケーション層(Odin)から使うための薄い層。
+	コアは1プロセスに1インスタンスのみ。
+*/
+
+#ifndef BUBIZ_CORE_H
+#define BUBIZ_CORE_H
+
+#include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// データディレクトリ(設定ファイル・BIOS ROM・ステートの置き場)を設定する。末尾の区切り文字は自動補完。
+// bubiz_create より前に呼ぶこと。
+void bubiz_set_data_dir(const char *dir);
+// スクリーンショットの保存先(空ならデータディレクトリ)
+void bubiz_set_snap_dir(const char *dir);
+// 録音(WAV)の保存先(空ならデータディレクトリ)
+void bubiz_set_sound_dir(const char *dir);
+
+// 設定ファイル(データディレクトリ内の相対名)を読む。無ければ既定値。bubiz_createより前に呼べる。
+void bubiz_load_config(const char *name);
+void bubiz_save_config(const char *name);
+
+// 設定値の上書き(bubiz_createより前に呼ぶ)。未知のkeyはfalse。
+// key: boot_mode, monitor_type, option_switch, sound_frequency, sound_latency,
+//      scan_line, printer_type
+bool bubiz_set_config(const char *key, int value);
+
+// 生成・破棄(設定が未読込なら既定の設定ファイルを読む)
+bool bubiz_create(void);
+void bubiz_destroy(void);
+
+// エミュレーション駆動: 1フレーム進める。返り値は実行したフレーム数。
+// 1つのスレッドから呼ぶこと。入力・メディア操作などの他の呼び出しは別スレッドから呼んでよく、
+// 次の bubiz_run() の冒頭で反映される。デバッガーでCPUが止まっている間は、この関数が戻らない。
+int bubiz_run(void);
+double bubiz_frame_rate(void);
+const char *bubiz_device_name(void);
+
+// 画面: bubiz_run() が描画した最新のフレームを、RGBA8(メモリ上R,G,B,Aの順)で取り出す。
+// bubiz_copy_frame() はどのスレッドからでも呼べる。幅・高さが現在の画面と違えばfalseを返す。
+bool bubiz_copy_frame(uint8_t *out_pixels, int width, int height, uint64_t *seq);
+// 最新のフレームが、200ライン表示(1行おきに有効)のものかどうか。画面フィルタが走査線の扱いを変えるのに使う
+bool bubiz_frame_skip_line(void);
+// 互換用(何もしない)。描画は bubiz_run() の中で行われる
+void bubiz_draw_screen(void);
+void bubiz_screen_size(int *width, int *height);
+void bubiz_screen_aspect(int *width, int *height);
+void bubiz_read_screen_rgba(uint8_t *out_pixels);
+
+// サウンド: ステレオ16bitのframes個を取り出す。返り値は実データのあったフレーム数(不足分は無音)
+int bubiz_sound_rate(void);
+size_t bubiz_pull_sound(int16_t *dest, size_t frames);
+
+// 入力(Windows仮想キーコード)
+void bubiz_key_down(int vk, bool repeat);
+void bubiz_key_up(int vk);
+void bubiz_key_lost_focus(void);
+void bubiz_set_joystick(int index, uint32_t status);	// bit0-3:上下左右 bit4-:ボタン
+void bubiz_set_mouse(int dx, int dy, int buttons);
+void bubiz_enable_mouse(bool enable);
+
+// 操作
+void bubiz_reset(void);
+void bubiz_special_reset(void);
+
+// メディア
+void bubiz_open_floppy(int drive, const char *path, int bank);
+void bubiz_close_floppy(int drive);
+bool bubiz_floppy_inserted(int drive);
+void bubiz_open_hard_disk(int drive, const char *path);
+void bubiz_close_hard_disk(int drive);
+void bubiz_play_tape(int drive, const char *path);
+void bubiz_rec_tape(int drive, const char *path);
+void bubiz_close_tape(int drive);
+
+// メディア(追加): ブランクディスク、書き込み禁止、D88のバンク
+bool bubiz_create_blank_floppy(const char *path, int type);	// type 0:2D 1:2DD
+bool bubiz_create_blank_hard_disk(const char *path);		// 20MB
+bool bubiz_floppy_protected(int drive);
+void bubiz_set_floppy_protected(int drive, bool protect);
+int bubiz_floppy_bank_count(int drive);
+const char *bubiz_floppy_bank_name(int drive, int bank);
+int bubiz_floppy_cur_bank(int drive);
+void bubiz_select_floppy_bank(int drive, int bank);
+bool bubiz_hard_disk_inserted(int drive);
+const char *bubiz_floppy_path(int drive);	// 入っているイメージのパス(無ければ空)
+const char *bubiz_tape_message(int drive);	// テープの状態表示(位置など)
+
+// テープ操作
+bool bubiz_tape_inserted(int drive);
+bool bubiz_tape_playing(int drive);
+bool bubiz_tape_recording(int drive);
+void bubiz_tape_button(int drive, int button);	// 0:再生 1:停止 2:早送り 3:早戻し
+
+// 履歴と初期ディレクトリ。kind 0:フロッピー 1:ハードディスク 2:テープ
+const char *bubiz_recent_path(int kind, int drive, int index);	// 空文字なら無し(最大8件)
+void bubiz_add_recent(int kind, int drive, const char *path);
+const char *bubiz_initial_dir(int kind);
+void bubiz_set_initial_dir(int kind, const char *dir);
+
+// 自動キー入力(貼り付け)。textはShift_JIS相当のバイト列(ASCIIと半角カナ)
+void bubiz_paste_text(const char *text, int size);
+void bubiz_stop_auto_key(void);
+void bubiz_set_romaji_to_kana(bool enable);
+
+// ドライブのアクセス状態(ビットはドライブ番号)
+uint32_t bubiz_floppy_accessed(void);
+uint32_t bubiz_floppy_indicator_color(void);	// ビットが立っていれば緑(2D/2DDの区別など)、無ければ赤
+uint32_t bubiz_hard_disk_accessed(void);
+uint32_t bubiz_tape_accessed(void);
+
+// 汎用の設定項目。キーは "名前" または "名前:添字"(例: correct_disk_timing:0)
+// 値を変えるとエミュレーションスレッドで update_config() が呼ばれる。不明なキーはfalse/-1
+bool bubiz_set_option(const char *key, int value);
+int bubiz_get_option(const char *key);
+int bubiz_sound_device_count(void);
+const char *bubiz_sound_device_name(int index);
+
+// ステートスロットの状態。保存済みなら true を返し、"ファイル名  YYYY-MM-DD hh:mm:ss" を buf に入れる
+bool bubiz_state_slot_info(int slot, char *buf, int cap);
+// スロットのステートファイルのパス。サムネイル画像は同じパスに ".png" を付けたもの(256x160)
+const char *bubiz_state_slot_path(int slot);
+// スロットのステートとサムネイルを削除する
+void bubiz_delete_state_slot(int slot);
+
+// ステート
+void bubiz_save_state(const char *path);
+void bubiz_load_state(const char *path);
+int bubiz_state_save_pending(void);	// 保存待ち(実行中を含む)の数。0なら書き込み完了
+void bubiz_save_state_slot(int slot);	// データディレクトリの mz2500.sta<slot> に保存
+void bubiz_load_state_slot(int slot);
+
+// 録画・キャプチャ
+void bubiz_capture_screen(void);
+bool bubiz_write_screenshot(const char *path);	// 現在の画面をPNGで保存
+void bubiz_start_record_sound(void);
+bool bubiz_start_record_sound_to(const char *path);	// 指定パスへWAV録音を開始
+void bubiz_stop_record_sound(void);
+
+// デバッガー(端末の標準入出力を使うコンソール)。cpu_indexは0がメインCPU。
+// 開いたあとCPUはブレークし、端末で '?' を入力するとコマンド一覧が表示される。
+void bubiz_open_debugger(int cpu_index);
+void bubiz_close_debugger(void);
+bool bubiz_debugger_active(void);
+// 仮想コンソール: デバッガーの入出力を端末ではなくアプリのウィンドウで行う(端末が無い起動向け)
+void bubiz_set_virtual_console(bool on);
+int bubiz_console_read(unsigned short *attr, char *buf, int cap);	// 出力の続きを取り出す。属性が同じ文字列ごと。無ければ0
+void bubiz_console_write_input(const char *s, int n);	// デバッガーへ文字を送る('\r'で行の確定)
+void bubiz_console_break(void);
+// 別ウィンドウのコンソール(Windows: 専用コンソール / Linux・macOS: ターミナルを開いて中継)。
+// 開けたらtrue。デバッガーを開く直前に呼ぶ。self_exeは自分自身の実行ファイルのパス
+bool bubiz_prepare_external_console(const char *self_exe);
+// ターミナルの中で動く中継(-dbg_relay <socket> で起動されたときに呼ぶ)。終了コードを返す
+int bubiz_run_console_relay(const char *socket_path);	// 実行中のCPUを止める(ESC相当)
+
+// 電源オフ要求(ゲストが要求した場合)の有無
+bool bubiz_power_off_requested(void);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

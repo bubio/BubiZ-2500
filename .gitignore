@@ -1,0 +1,17 @@
+# ビルド成果物
+/build/
+/dist/
+*.o
+*.a
+*.so
+*.dylib
+/bin/
+# ローカルツール（Odin/Sokolのクローンなど）
+/.tools/
+/vendor/sokol-odin/sokol/**/*.a
+/vendor/sokol-odin/sokol/**/*.so
+/vendor/sokol-odin/sokol/**/*.dylib
+
+# BIOS ROM・イメージは著作物のためコミットしない
+*.ROM
+*.rom
