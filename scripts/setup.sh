@@ -78,8 +78,9 @@ case "$(uname -s)" in
     cp "$IMGUI_OUT/sokol_imgui_macos_${MN}_metal_release.a" "$IMGUI_OUT/sokol_imgui_macos_${MN}_metal_debug.a"
     ;;
   MINGW*|MSYS*|CYGWIN*)
-    (cd "$IMGUI_TMP" && cl /nologo /c /O2 /DNDEBUG /DIMPL /DSOKOL_D3D11 /I"$(cygpath -w "$DCIMGUI/src")" "$(cygpath -w "$DEST/sokol/c/sokol_imgui.c")" \
-      && lib /nologo /OUT:"$(cygpath -w "$IMGUI_OUT/sokol_imgui_windows_x64_d3d11_release.lib")" sokol_imgui.obj)
+    # MSYSが /オプション をパスとして変換しないよう、ハイフン形式で渡し変換も止める
+    (cd "$IMGUI_TMP" && MSYS_NO_PATHCONV=1 cl -nologo -c -O2 -DNDEBUG -DIMPL -DSOKOL_D3D11 -I"$(cygpath -w "$DCIMGUI/src")" "$(cygpath -w "$DEST/sokol/c/sokol_imgui.c")" \
+      && MSYS_NO_PATHCONV=1 lib -nologo -OUT:"$(cygpath -w "$IMGUI_OUT/sokol_imgui_windows_x64_d3d11_release.lib")" sokol_imgui.obj)
     cp "$IMGUI_OUT/sokol_imgui_windows_x64_d3d11_release.lib" "$IMGUI_OUT/sokol_imgui_windows_x64_d3d11_debug.lib"
     ;;
 esac
