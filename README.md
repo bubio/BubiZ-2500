@@ -18,7 +18,7 @@ BubiZ-2500 は、シャープ MZ-2500 のエミュレーターです。macOS / L
   </a>
 </p>
 
-エミュレーションコアには [Common Source Code Project](https://github.com/bubio/common_source_code_project) の EmuZ-2500 を利用し、アプリケーション部分は Odin、画面・音声・入力は Sokol で構成しています。操作感は、オリジナルの EmuZ-2500 に近づけることを目指しています。
+エミュレーションコアには [Common Source Code Project](https://github.com/bubio/common_source_code_project) の EmuZ-2500 を利用し、アプリケーション部分は Odin、画面・音声・入力は Sokol で構成しています。
 
 <p align="center"><img src="docs/Screenshot1.png" alt="Final Mystery Murder Club on BubiZ-2500 (macOS)"></p>
 
@@ -45,7 +45,18 @@ BubiZ-2500 は、シャープ MZ-2500 のエミュレーターです。macOS / L
 | Linux (Fedora / RHEL / openSUSE) | `.rpm` | `x86_64` / `aarch64` |
 | Linux (どのディストリビューションでも) | `.AppImage` | `x86_64` / `aarch64` |
 
-> macOS 版は署名・公証をしていません。初回の起動は、Finder でアプリを右クリックして「開く」を選んでください。
+> **注意**: macOS版は Apple によるノータリゼーション（公証）を受けていないため、初回起動時に Gatekeeper によってブロックされる場合があります。以下のいずれかの方法で回避できます：
+>
+> **方法1: ターミナルで隔離フラグを削除**
+> ```bash
+> xattr -cr /Applications/Bubilator88.app
+> ```
+>
+> **方法2: システム設定から許可**
+> 1. アプリを開こうとしてブロックされた後
+> 2. 「システム設定」→「プライバシーとセキュリティ」を開く
+> 3. 「"Bubilator88"は開発元を確認できないため、使用がブロックされました」の横にある「このまま開く」をクリック
+
 
 ## 事前に必要なもの
 
@@ -87,7 +98,3 @@ BubiZ-2500 disk.d88
 
 - BubiZ-2500 は [GNU General Public License v2](LICENSE) で提供します。
 - エミュレーションコアは、Common Source Code Project の EmuZ-2500 です。ライセンスの詳細は `core/csp/license` を参照してください。
-
----
-
-*このプロジェクトは有志によるものであり、シャープ株式会社および Common Source Code Project の作者とは関係ありません。*
