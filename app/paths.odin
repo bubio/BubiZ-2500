@@ -21,13 +21,25 @@ default_data_dir :: proc() -> string {
 			return fmt.aprintf("%s/Library/Application Support/%s", home, APP_DIR_NAME)
 		}
 	} else {
-		xdg := os.get_env("XDG_CONFIG_HOME", context.temp_allocator)
-		if xdg != "" {
-			return fmt.aprintf("%s/%s", xdg, APP_DIR_NAME)
-		}
+		// 他のエミュレーターと同じく、XDGのデータディレクトリ(~/.local/share)に置く
 		home := os.get_env("HOME", context.temp_allocator)
-		if home != "" {
-			return fmt.aprintf("%s/.config/%s", home, APP_DIR_NAME)
+		data := os.get_env("XDG_DATA_HOME", context.temp_allocator)
+		if data == "" && home != "" {
+			data = fmt.tprintf("%s/.local/share", home)
+		}
+		if data != "" {
+			dir := fmt.aprintf("%s/%s", data, APP_DIR_NAME)
+			// 以前の版が使っていた ~/.config 側にだけデータがある場合は、そちらを引き続き使う
+			if !os.exists(dir) && home != "" {
+				cfg := os.get_env("XDG_CONFIG_HOME", context.temp_allocator)
+				if cfg == "" {cfg = fmt.tprintf("%s/.config", home)}
+				old := fmt.tprintf("%s/%s", cfg, APP_DIR_NAME)
+				if os.exists(old) {
+					delete(dir)
+					return strings.clone(old)
+				}
+			}
+			return dir
 		}
 	}
 	return strings.clone(".")
