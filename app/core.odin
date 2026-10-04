@@ -103,6 +103,7 @@ foreign core {
 	state_slot_path :: proc(slot: c.int) -> cstring ---
 	delete_state_slot :: proc(slot: c.int) ---
 	save_state_slot :: proc(slot: c.int) ---
+	state_save_pending :: proc() -> c.int ---
 	load_state_slot :: proc(slot: c.int) ---
 
 	capture_screen :: proc() ---

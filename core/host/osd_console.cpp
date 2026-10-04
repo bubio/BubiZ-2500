@@ -6,6 +6,11 @@
 	[ BubiZ host dependent ]
 */
 
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
+#endif
 #include <stdio.h>
 #include <string.h>
 #include <deque>
@@ -72,21 +77,25 @@ void bubiz_console_break(void)
 
 // 別ウィンドウのコンソール。POSIXでは、ターミナルエミュレーターを起動し、その中で動く中継プロセス
 // (自分自身を -dbg_relay 付きで起動したもの)とUNIXドメインソケットで文字をやり取りする。
-// Windowsでは専用のコンソールウィンドウ(AllocConsole)を開く。
+// Windowsでは新しいコンソールで中継プロセスを起動し、ループバックのTCPで文字をやり取りする。
+#ifdef _WIN32
+#pragma comment(lib, "ws2_32.lib")
 namespace {
-int g_ext_fd = -1;		// POSIX: 中継プロセスとのソケット
-bool g_ext_console = false;	// Windows: 専用コンソールを開いている
-std::string g_ext_sock;
+SOCKET g_ext_sock = INVALID_SOCKET;	// 中継プロセスとのソケット
 }
-
 static bool ext_active()
 {
-#ifdef _WIN32
-	return g_ext_console;
-#else
-	return g_ext_fd >= 0;
-#endif
+	return g_ext_sock != INVALID_SOCKET;
 }
+#else
+namespace {
+int g_ext_fd = -1;		// 中継プロセスとのソケット
+}
+static bool ext_active()
+{
+	return g_ext_fd >= 0;
+}
+#endif
 
 static void vcon_write(const char *buffer, unsigned int length)
 {
@@ -99,34 +108,173 @@ static void vcon_write(const char *buffer, unsigned int length)
 }
 
 #ifdef _WIN32
-#include <windows.h>
 
 struct console_state_t {
 	DWORD in_mode, out_mode;
 	bool valid;
-	_TCHAR pending[8];	// 矢印キーを展開した残り
-	int pending_len, pending_ptr;
 };
 
-bool bubiz_prepare_external_console(const char *self_exe)
+static bool win_sock_init()
 {
-	if(g_ext_console) {
-		return true;
+	static bool done = false;
+	if(!done) {
+		WSADATA wsa;
+		if(WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
+			return false;
+		}
+		done = true;
 	}
-	if(!AllocConsole() && GetConsoleWindow() == NULL) {
-		return false;
-	}
-	// 標準入出力を新しいコンソールへ向ける
-	freopen("CONOUT$", "w", stdout);
-	freopen("CONIN$", "r", stdin);
-	SetConsoleTitleA("BubiZ-2500 Debugger");
-	g_ext_console = true;
 	return true;
 }
 
-int bubiz_run_console_relay(const char *sock)
+static void ext_send(const char *p, size_t n)
 {
-	return 1;	// Windowsでは中継を使わない
+	while(n > 0) {
+		int w = send(g_ext_sock, p, (int)n, 0);
+		if(w <= 0) {
+			return;
+		}
+		p += w;
+		n -= (size_t)w;
+	}
+}
+
+// 新しいコンソールウィンドウで自分自身を -dbg_relay 付きで起動し、接続を待つ
+bool bubiz_prepare_external_console(const char *self_exe)
+{
+	if(ext_active()) {
+		return true;
+	}
+	if(!win_sock_init()) {
+		return false;
+	}
+	SOCKET ls = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if(ls == INVALID_SOCKET) {
+		return false;
+	}
+	sockaddr_in addr;
+	memset(&addr, 0, sizeof(addr));
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	addr.sin_port = 0;
+	int len = sizeof(addr);
+	if(bind(ls, (sockaddr *)&addr, sizeof(addr)) != 0 || listen(ls, 1) != 0 || getsockname(ls, (sockaddr *)&addr, &len) != 0) {
+		closesocket(ls);
+		return false;
+	}
+	// 実行ファイルのパスはUTF-8なのでワイド文字へ変換して起動する
+	int wn = MultiByteToWideChar(CP_UTF8, 0, self_exe, -1, NULL, 0);
+	std::wstring cmd = L"\"";
+	if(wn > 0) {
+		std::wstring w(wn, L'\0');
+		MultiByteToWideChar(CP_UTF8, 0, self_exe, -1, &w[0], wn);
+		w.resize(wn - 1);
+		cmd += w;
+	}
+	cmd += L"\" -dbg_relay " + std::to_wstring((int)ntohs(addr.sin_port));
+	STARTUPINFOW si;
+	PROCESS_INFORMATION pi;
+	memset(&si, 0, sizeof(si));
+	memset(&pi, 0, sizeof(pi));
+	si.cb = sizeof(si);
+	bool ok = CreateProcessW(NULL, &cmd[0], NULL, NULL, FALSE, CREATE_NEW_CONSOLE, NULL, NULL, &si, &pi) != 0;
+	SOCKET cs = INVALID_SOCKET;
+	if(ok) {
+		CloseHandle(pi.hThread);
+		CloseHandle(pi.hProcess);
+		fd_set fds;
+		FD_ZERO(&fds);
+		FD_SET(ls, &fds);
+		timeval tv = {8, 0};
+		if(select(0, &fds, NULL, NULL, &tv) > 0) {
+			cs = accept(ls, NULL, NULL);
+		}
+	}
+	closesocket(ls);
+	if(cs == INVALID_SOCKET) {
+		return false;
+	}
+	u_long nb = 1;
+	ioctlsocket(cs, FIONBIO, &nb);	// 読み取りは常に非ブロッキング
+	g_ext_sock = cs;
+	return true;
+}
+
+static DWORD WINAPI relay_output_thread(LPVOID param)
+{
+	SOCKET s = (SOCKET)(UINT_PTR)param;
+	HANDLE out = CreateFileA("CONOUT$", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+	char buf[1024];
+	for(;;) {
+		int n = recv(s, buf, sizeof(buf), 0);
+		if(n <= 0) {
+			break;	// エミュレーターが閉じた
+		}
+		DWORD w;
+		WriteFile(out, buf, (DWORD)n, &w, NULL);
+	}
+	ExitProcess(0);
+	return 0;
+}
+
+// 新しいコンソールの中で動く中継: コンソールの入力をソケットへ、ソケットの出力をコンソールへ流す
+int bubiz_run_console_relay(const char *port_str)
+{
+	if(!win_sock_init()) {
+		return 1;
+	}
+	if(GetConsoleWindow() == NULL && !AllocConsole()) {
+		return 1;
+	}
+	HANDLE in = CreateFileA("CONIN$", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+	HANDLE out = CreateFileA("CONOUT$", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+	if(in == INVALID_HANDLE_VALUE || out == INVALID_HANDLE_VALUE) {
+		return 1;
+	}
+	SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	sockaddr_in addr;
+	memset(&addr, 0, sizeof(addr));
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	addr.sin_port = htons((unsigned short)atoi(port_str));
+	if(s == INVALID_SOCKET || connect(s, (sockaddr *)&addr, sizeof(addr)) != 0) {
+		return 1;
+	}
+	SetConsoleOutputCP(CP_UTF8);
+	SetConsoleTitleW(L"BubiZ-2500 Debugger");
+	DWORD om = 0;
+	GetConsoleMode(out, &om);
+	SetConsoleMode(out, om | ENABLE_PROCESSED_OUTPUT | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+	SetConsoleMode(in, ENABLE_PROCESSED_INPUT);	// 行入力・エコーなし。1文字ずつ受け取る
+	CreateThread(NULL, 0, relay_output_thread, (LPVOID)(UINT_PTR)s, 0, NULL);
+	for(;;) {
+		INPUT_RECORD ir;
+		DWORD read = 0;
+		if(!ReadConsoleInputW(in, &ir, 1, &read) || read == 0) {
+			break;
+		}
+		if(ir.EventType != KEY_EVENT || !ir.Event.KeyEvent.bKeyDown) {
+			continue;
+		}
+		WORD vk = ir.Event.KeyEvent.wVirtualKeyCode;
+		wchar_t wc = ir.Event.KeyEvent.uChar.UnicodeChar;
+		char buf[8];
+		int n = 0;
+		if(vk == VK_UP || vk == VK_DOWN) {
+			// 矢印キーは ESC [ A / B の列にする(デバッガーの履歴機能用)
+			buf[0] = 0x1b;
+			buf[1] = '[';
+			buf[2] = (vk == VK_UP) ? 'A' : 'B';
+			n = 3;
+		} else if(wc != 0) {
+			n = WideCharToMultiByte(CP_UTF8, 0, &wc, 1, buf, sizeof(buf), NULL, NULL);
+		}
+		if(n > 0 && send(s, buf, n, 0) <= 0) {
+			break;
+		}
+	}
+	closesocket(s);
+	return 0;
 }
 
 void OSD::open_console(int width, int height, const _TCHAR* title)
@@ -137,13 +285,8 @@ void OSD::open_console(int width, int height, const _TCHAR* title)
 	if(ext_active()) {
 		console_open = true;
 		console_closed = false;
-#ifdef _WIN32
-		fprintf(stdout, "\n[%s]\n", title);
-		fflush(stdout);
-#else
 		std::string t = std::string("[") + title + "]\n";
 		ext_send(t.c_str(), t.size());
-#endif
 		return;
 	}
 	if(g_vcon) {
@@ -182,6 +325,12 @@ void OSD::close_console()
 		console_open = false;
 		return;
 	}
+	if(g_ext_sock != INVALID_SOCKET) {
+		closesocket(g_ext_sock);	// 中継プロセスが終わり、コンソールのウィンドウも閉じる
+		g_ext_sock = INVALID_SOCKET;
+		console_open = false;
+		return;
+	}
 #ifndef _WIN32
 	if(g_ext_fd >= 0) {
 		close(g_ext_fd);	// 中継プロセスが終わり、ターミナルのウィンドウも閉じる
@@ -202,14 +351,22 @@ void OSD::close_console()
 	console_open = false;
 	fputs("\x1b[0m", stdout);
 	fflush(stdout);
-	if(g_ext_console) {
-		FreeConsole();	// 専用に開いたコンソールウィンドウを閉じる
-		g_ext_console = false;
-	}
 }
 
 int OSD::read_console_input(_TCHAR* buffer, unsigned int length)
 {
+	if(g_ext_sock != INVALID_SOCKET) {
+		char tmp[16];
+		int n = recv(g_ext_sock, tmp, (int)(length < sizeof(tmp) ? length : sizeof(tmp)), 0);
+		if(n == 0 || (n < 0 && WSAGetLastError() != WSAEWOULDBLOCK)) {
+			console_closed = true;	// コンソールのウィンドウが閉じられた
+			return 0;
+		}
+		for(int i = 0; i < n; i++) {
+			buffer[i] = tmp[i];
+		}
+		return n > 0 ? n : 0;
+	}
 	if(g_vcon && !ext_active()) {
 		std::lock_guard<std::mutex> lock(g_vcon_mutex);
 		unsigned int n = 0;
@@ -253,6 +410,19 @@ int OSD::read_console_input(_TCHAR* buffer, unsigned int length)
 
 bool OSD::is_console_key_pressed(int vk)
 {
+	if(g_ext_sock != INVALID_SOCKET) {
+		if(vk != VK_ESCAPE) {
+			return false;
+		}
+		// 単独のESCだけを押下とみなす(矢印キーのESC [ A のような列は残す)
+		char c[3];
+		int n = recv(g_ext_sock, c, sizeof(c), MSG_PEEK);
+		if(n == 1 && c[0] == 0x1b) {
+			recv(g_ext_sock, c, 1, 0);
+			return true;
+		}
+		return false;
+	}
 	if(g_vcon && !ext_active()) {
 		std::lock_guard<std::mutex> lock(g_vcon_mutex);
 		bool b = g_vcon_break && vk == VK_ESCAPE;
@@ -508,13 +678,8 @@ void OSD::open_console(int width, int height, const _TCHAR* title)
 	if(ext_active()) {
 		console_open = true;
 		console_closed = false;
-#ifdef _WIN32
-		fprintf(stdout, "\n[%s]\n", title);
-		fflush(stdout);
-#else
 		std::string t = std::string("[") + title + "]\n";
 		ext_send(t.c_str(), t.size());
-#endif
 		return;
 	}
 	if(g_vcon) {
@@ -676,8 +841,11 @@ unsigned int OSD::get_console_code_page()
 
 void OSD::set_console_text_attribute(unsigned short attr)
 {
-#ifndef _WIN32
+#ifdef _WIN32
+	if(g_ext_sock != INVALID_SOCKET) {
+#else
 	if(g_ext_fd >= 0) {
+#endif
 		int idx = ((attr & OSD_CONSOLE_RED) ? 1 : 0) | ((attr & OSD_CONSOLE_GREEN) ? 2 : 0) | ((attr & OSD_CONSOLE_BLUE) ? 4 : 0);
 		int base = (attr & OSD_CONSOLE_INTENSITY) ? 90 : 30;
 		if(idx == 0 && !(attr & OSD_CONSOLE_INTENSITY)) {
@@ -688,7 +856,6 @@ void OSD::set_console_text_attribute(unsigned short attr)
 		ext_send(esc, (size_t)n);
 		return;
 	}
-#endif
 	if(g_vcon && !ext_active()) {
 		std::lock_guard<std::mutex> lock(g_vcon_mutex);
 		g_vcon_attr = attr;
@@ -705,12 +872,14 @@ void OSD::set_console_text_attribute(unsigned short attr)
 
 void OSD::write_console(const _TCHAR* buffer, unsigned int length)
 {
-#ifndef _WIN32
+#ifdef _WIN32
+	if(g_ext_sock != INVALID_SOCKET) {
+#else
 	if(g_ext_fd >= 0) {
+#endif
 		ext_send(buffer, length);
 		return;
 	}
-#endif
 	if(g_vcon && !ext_active()) {
 		vcon_write(buffer, length);
 		return;

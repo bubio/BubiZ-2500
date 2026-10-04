@@ -6,7 +6,10 @@ import "core:strings"
 
 main :: proc() {
 	when ODIN_OS == .Windows {
-		attach_parent_console()
+		// 中継プロセスは自前のコンソールを持つので、親のコンソールへは接続しない
+		if !(len(os.args) > 1 && os.args[1] == "-dbg_relay") {
+			attach_parent_console()
+		}
 	}
 	opt, err := parse_args(os.args[1:])
 	if err != "" {

@@ -20,8 +20,7 @@ THUMB_H :: 160
 State_Dialog :: struct {
 	open:       bool,
 	selected:   int,
-	refresh_in: int, // 保存は非同期のため、数フレーム待ってからサムネイルを読み直す
-	refresh_again: bool, // 書き込みが遅れた場合に備えて、もう一度読み直す
+	saving: bool, // 保存の完了待ち。完了したらサムネイルを読み直す
 	images:     [STATE_SLOTS]sg.Image,
 	views:      [STATE_SLOTS]sg.View,
 	loaded:     [STATE_SLOTS]bool,
@@ -101,15 +100,9 @@ draw_state_dialog :: proc() {
 	if !state_dlg.open {
 		return
 	}
-	if state_dlg.refresh_in > 0 {
-		state_dlg.refresh_in -= 1
-		if state_dlg.refresh_in == 0 {
-			state_refresh_thumbnails()
-			if state_dlg.refresh_again {
-				state_dlg.refresh_again = false
-				state_dlg.refresh_in = 90
-			}
-		}
+	if state_dlg.saving && state_save_pending() == 0 {
+		state_dlg.saving = false
+		state_refresh_thumbnails()
 	}
 	vw, vh := f32(sapp.width()) / sapp.dpi_scale(), f32(sapp.height()) / sapp.dpi_scale()
 	dlg_w, dlg_h := f32(480), f32(360)
@@ -187,8 +180,7 @@ draw_state_dialog :: proc() {
 		sel := state_dlg.selected
 		if igButtonEx("Save", {-1, 0}) {
 			save_state_slot(i32(sel))
-			state_dlg.refresh_in = 30
-			state_dlg.refresh_again = true
+			state_dlg.saving = true
 		}
 		igBeginDisabled(!exists[sel])
 		if igButtonEx("Load", {-1, 0}) {

@@ -9,6 +9,7 @@
 	  画面は bubiz_run() の末尾で最新のフレームとして公開され、bubiz_copy_frame() で取り出す。
 */
 
+#include <atomic>
 #include <stdio.h>
 #include <math.h>
 #ifndef M_PI
@@ -549,8 +550,16 @@ void bubiz_delete_state_slot(int slot)
 	remove((path + ".png").c_str());
 }
 
+static std::atomic<int> g_state_save_pending(0);
+
+int bubiz_state_save_pending(void)
+{
+	return g_state_save_pending.load();
+}
+
 void bubiz_save_state_slot(int slot)
 {
+	g_state_save_pending++;
 	post([=]() {
 		if(g_emu) {
 			std::string path = g_emu->state_file_path(slot);
@@ -558,6 +567,7 @@ void bubiz_save_state_slot(int slot)
 			// 一覧に出すサムネイル
 			g_emu->get_osd()->write_thumbnail((path + ".png").c_str(), 256, 160);
 		}
+		g_state_save_pending--;
 	});
 }
 

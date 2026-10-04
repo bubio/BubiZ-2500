@@ -56,27 +56,30 @@ jobs:
         run: build/core/bubiz_smoke "$RUNNER_TEMP/"
       - name: 配布物の作成(deb / rpm / AppImage)
         run: scripts/package-linux.sh all
-      - name: 配布物の名前
+      - name: 配布物の名前(アーティファクト名は中のファイル名と一致させる)
         id: artifact
-        run: echo "name=$(scripts/artifact-name.sh)" >> "$GITHUB_OUTPUT"
+        run: |
+          for ext in deb rpm AppImage; do
+            echo "$ext=$(basename dist/*.$ext)" >> "$GITHUB_OUTPUT"
+          done
       - name: 配布物のアップロード (deb)
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.artifact.outputs.name }}-deb
+          name: ${{ steps.artifact.outputs.deb }}
           path: dist/*.deb
           if-no-files-found: error
           retention-days: 14
       - name: 配布物のアップロード (rpm)
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.artifact.outputs.name }}-rpm
+          name: ${{ steps.artifact.outputs.rpm }}
           path: dist/*.rpm
           if-no-files-found: error
           retention-days: 14
       - name: 配布物のアップロード (AppImage)
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.artifact.outputs.name }}-AppImage
+          name: ${{ steps.artifact.outputs.AppImage }}
           path: dist/*.AppImage
           if-no-files-found: error
           retention-days: 14

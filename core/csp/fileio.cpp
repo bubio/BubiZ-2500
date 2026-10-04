@@ -1204,9 +1204,8 @@ void FILEIO::StateArray(bool *buffer, size_t size, size_t count)
 
 void FILEIO::StateArray(uint8_t *buffer, size_t size, size_t count)
 {
-	for(unsigned int i = 0; i < size / sizeof(buffer[0]) * count; i++) {
-		StateValue(buffer[i]);
-	}
+	// 1バイト要素はそのまま一括で入出力する(要素ごとの呼び出しは非常に遅い)
+	StateBuffer(buffer, size, count);
 }
 
 void FILEIO::StateArray(uint16_t *buffer, size_t size, size_t count)
@@ -1232,9 +1231,8 @@ void FILEIO::StateArray(uint64_t *buffer, size_t size, size_t count)
 
 void FILEIO::StateArray(int8_t *buffer, size_t size, size_t count)
 {
-	for(unsigned int i = 0; i < size / sizeof(buffer[0]) * count; i++) {
-		StateValue(buffer[i]);
-	}
+	// 1バイト要素はそのまま一括で入出力する(要素ごとの呼び出しは非常に遅い)
+	StateBuffer(buffer, size, count);
 }
 
 void FILEIO::StateArray(int16_t *buffer, size_t size, size_t count)
@@ -1295,9 +1293,8 @@ void FILEIO::StateArray(double *buffer, size_t size, size_t count)
 
 void FILEIO::StateArray(char *buffer, size_t size, size_t count)
 {
-	for(unsigned int i = 0; i < size / sizeof(buffer[0]) * count; i++) {
-		StateValue(buffer[i]);
-	}
+	// 1バイト要素はそのまま一括で入出力する(要素ごとの呼び出しは非常に遅い)
+	StateBuffer(buffer, size, count);
 }
 
 void FILEIO::StateArray(wchar_t *buffer, size_t size, size_t count)

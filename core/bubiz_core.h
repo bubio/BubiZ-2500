@@ -133,6 +133,7 @@ void bubiz_delete_state_slot(int slot);
 // ステート
 void bubiz_save_state(const char *path);
 void bubiz_load_state(const char *path);
+int bubiz_state_save_pending(void);	// 保存待ち(実行中を含む)の数。0なら書き込み完了
 void bubiz_save_state_slot(int slot);	// データディレクトリの mz2500.sta<slot> に保存
 void bubiz_load_state_slot(int slot);
 
