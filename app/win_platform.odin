@@ -9,6 +9,13 @@ import win "core:sys/windows"
 
 ATTACH_PARENT_PROCESS :: win.DWORD(0xFFFFFFFF)
 
+foreign import kernel32 "system:Kernel32.lib"
+
+@(default_calling_convention = "system")
+foreign kernel32 {
+	SetStdHandle :: proc(nStdHandle: win.DWORD, hHandle: win.HANDLE) -> win.BOOL ---
+}
+
 // GUIアプリ(コンソールを持たない)でも、ターミナルから起動されたときはそのターミナルへ出力する。
 // 標準出力がパイプやファイルに向けられている場合はそのまま使う
 attach_parent_console :: proc() {
@@ -23,13 +30,13 @@ attach_parent_console :: proc() {
 	if h_out != win.INVALID_HANDLE {
 		os.stdout = os.new_file(uintptr(h_out), "CONOUT$")
 		os.stderr = os.stdout
-		win.SetStdHandle(win.STD_OUTPUT_HANDLE, h_out)
-		win.SetStdHandle(win.STD_ERROR_HANDLE, h_out)
+		SetStdHandle(win.STD_OUTPUT_HANDLE, h_out)
+		SetStdHandle(win.STD_ERROR_HANDLE, h_out)
 	}
 	h_in := win.CreateFileW(win.utf8_to_wstring("CONIN$"), win.GENERIC_READ | win.GENERIC_WRITE, win.FILE_SHARE_READ | win.FILE_SHARE_WRITE, nil, win.OPEN_EXISTING, 0, nil)
 	if h_in != win.INVALID_HANDLE {
 		os.stdin = os.new_file(uintptr(h_in), "CONIN$")
-		win.SetStdHandle(win.STD_INPUT_HANDLE, h_in)
+		SetStdHandle(win.STD_INPUT_HANDLE, h_in)
 	}
 }
 
@@ -50,7 +57,7 @@ known_folder :: proc(which: Known_Folder) -> string {
 		return ""
 	}
 	defer win.CoTaskMemFree(rawptr(path))
-	s, err := win.wstring_to_utf8(path, -1, context.allocator)
+	s, err := win.wstring_to_utf8(([^]u16)(path), -1, context.allocator)
 	if err != nil {
 		return ""
 	}
