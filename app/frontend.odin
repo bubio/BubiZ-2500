@@ -615,6 +615,10 @@ cleanup :: proc "c" () {
 	if fe.opt.sound {
 		saudio.shutdown()
 	}
+	// macOSではsapp.run()が戻らないため、設定の保存はここで行う
+	if fe.opt.save_config {
+		save_config("mz2500.ini")
+	}
 	gui_shutdown()
 	sgl.shutdown()
 	sg.shutdown()

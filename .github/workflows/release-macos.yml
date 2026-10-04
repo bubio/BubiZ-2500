@@ -32,7 +32,7 @@ jobs:
         run: build/bin/BubiZ-2500 -headless 60 -nosound
       - name: 配布物の作成(dmg)
         env:
-          BUILD_NUMBER: ${{ github.run_number }}
+          BUILD_NUMBER: 1
         run: scripts/package-macos.sh
       - name: 配布物の名前
         id: artifact

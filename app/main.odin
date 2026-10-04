@@ -64,12 +64,12 @@ main :: proc() {
 
 	if opt.headless > 0 {
 		run_headless(opt)
+		if opt.save_config {
+			save_config("mz2500.ini")
+		}
 	} else {
+		// 設定はウィンドウ終了時(cleanup)に保存する。macOSではrun_frontendから戻らないため
 		run_frontend(opt)
-	}
-
-	if opt.save_config {
-		save_config("mz2500.ini")
 	}
 }
 
