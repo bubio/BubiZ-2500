@@ -940,7 +940,7 @@ set_dir :: proc(dir: string) {
 			return
 		}
 	}
-	infos, err := os.read_directory_by_path(dir, -1, context.allocator)
+	infos, err := os.read_directory_by_path(gui.cwd, -1, context.allocator)
 	if err != nil {
 		return
 	}
