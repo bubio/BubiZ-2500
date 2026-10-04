@@ -98,6 +98,7 @@ foreign core {
 
 	save_state :: proc(path: cstring) ---
 	load_state :: proc(path: cstring) ---
+	state_slot_info :: proc(slot: c.int, buf: [^]u8, cap: c.int) -> bool ---
 	save_state_slot :: proc(slot: c.int) ---
 	load_state_slot :: proc(slot: c.int) ---
 

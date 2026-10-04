@@ -272,7 +272,8 @@ draw_control_menu :: proc() {
 	igSeparator()
 	if menu("Save State") {
 		for s in 0 ..< 10 {
-			if item(fmt.ctprintf("State %d", s)) {
+			info, _ := state_slot_label(s)
+			if item(fmt.ctprintf("State %d  %s##save%d", s, info, s)) {
 				save_state_slot(i32(s))
 			}
 		}
@@ -280,7 +281,9 @@ draw_control_menu :: proc() {
 	}
 	if menu("Load State") {
 		for s in 0 ..< 10 {
-			if item(fmt.ctprintf("State %d", s)) {
+			// 保存されていないスロットは読み込めないので選べないようにする
+			info, saved := state_slot_label(s)
+			if item(fmt.ctprintf("State %d  %s##load%d", s, info, s), nil, false, saved) {
 				load_state_slot(i32(s))
 			}
 		}
@@ -297,6 +300,16 @@ draw_control_menu :: proc() {
 	if item("Exit") {
 		sapp.request_quit()
 	}
+}
+
+// ステートスロットの表示。保存済みなら "ファイル名  日時"、未保存なら "(empty)"
+@(private = "file")
+state_slot_label :: proc(slot: int) -> (label: string, saved: bool) {
+	buf: [160]u8
+	if state_slot_info(i32(slot), raw_data(buf[:]), len(buf)) {
+		return strings.clone(string(cstring(raw_data(buf[:]))), context.temp_allocator), true
+	}
+	return "(empty)", false
 }
 
 @(private = "file")
@@ -917,9 +930,11 @@ clear_entries :: proc() {
 // ディレクトリを読み直す。Windowsで空の場合はドライブ一覧を出す
 @(private = "file")
 set_dir :: proc(dir: string) {
+	// dirは古いgui.cwdの一部を指していることがある(「上へ」など)ので、解放する前に複製する
+	new_cwd := strings.clone(dir)
 	clear_entries()
 	delete(gui.cwd)
-	gui.cwd = strings.clone(dir)
+	gui.cwd = new_cwd
 	copy_to_path_buf(gui.cwd)
 
 	when ODIN_OS == .Windows {

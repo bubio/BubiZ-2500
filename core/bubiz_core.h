@@ -121,6 +121,9 @@ int bubiz_get_option(const char *key);
 int bubiz_sound_device_count(void);
 const char *bubiz_sound_device_name(int index);
 
+// ステートスロットの状態。保存済みなら true を返し、"ファイル名  YYYY-MM-DD hh:mm:ss" を buf に入れる
+bool bubiz_state_slot_info(int slot, char *buf, int cap);
+
 // ステート
 void bubiz_save_state(const char *path);
 void bubiz_load_state(const char *path);

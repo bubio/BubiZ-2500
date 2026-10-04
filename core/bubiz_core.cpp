@@ -9,6 +9,10 @@
 	  画面は bubiz_run() の末尾で最新のフレームとして公開され、bubiz_copy_frame() で取り出す。
 */
 
+#include <stdio.h>
+#include <time.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <deque>
 #include <functional>
 #include <mutex>
@@ -396,6 +400,28 @@ void bubiz_load_state(const char *path)
 {
 	std::string p = path;
 	post([=]() { if(g_emu) g_emu->load_state(p.c_str()); });
+}
+
+bool bubiz_state_slot_info(int slot, char *buf, int cap)
+{
+	if(g_emu == NULL || cap <= 0) {
+		return false;
+	}
+	std::string path = g_emu->state_file_path(slot);
+	struct stat st;
+	if(stat(path.c_str(), &st) != 0 || st.st_size <= 0) {
+		return false;
+	}
+	size_t sep = path.find_last_of("/\\");
+	std::string name = (sep == std::string::npos) ? path : path.substr(sep + 1);
+	time_t t = st.st_mtime;
+	struct tm *lt = localtime(&t);
+	char when[32] = "";
+	if(lt != NULL) {
+		strftime(when, sizeof(when), "%Y-%m-%d %H:%M:%S", lt);
+	}
+	snprintf(buf, cap, "%s  %s", name.c_str(), when);
+	return true;
 }
 
 void bubiz_save_state_slot(int slot)
