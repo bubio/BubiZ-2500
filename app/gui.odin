@@ -46,7 +46,8 @@ Pending_Bank :: struct {
 Gui :: struct {
 	ja:            bool, // 日本語フォントを読み込めたか
 	mouse_y:       f32, // フルスクリーン時にメニューを出すための位置(論理座標)
-	menu_open:     bool, // いずれかのメニューが開いている
+	menu_open:     bool, // いずれかのメニューが開いている(このフレームで描いた結果)
+	menu_was_open: bool, // 前のフレームでメニューが開いていた(フルスクリーンでバーを出し続ける判定に使う)
 	// ファイル選択
 	dialog_open:   bool,
 	kind:          Dialog_Kind,
@@ -115,7 +116,7 @@ gui_event :: proc(e: ^sapp.Event) -> bool {
 
 // メニューバーを表示するか(フルスクリーンでは、マウスを上端へ寄せたときだけ)
 gui_menu_visible :: proc() -> bool {
-	return !sapp.is_fullscreen() || gui.mouse_y < f32(MENU_HEIGHT_LOGICAL) || gui.menu_open
+	return !sapp.is_fullscreen() || gui.mouse_y < f32(MENU_HEIGHT_LOGICAL) || gui.menu_was_open
 }
 
 // エミュレーション画面が使える領域の上端と下端の余白(フレームバッファのピクセル)
@@ -139,6 +140,7 @@ tr :: proc(ja, en: cstring) -> cstring {
 
 gui_new_frame :: proc() {
 	simgui.new_frame({width = sapp.width(), height = sapp.height(), delta_time = sapp.frame_duration(), dpi_scale = sapp.dpi_scale()})
+	gui.menu_was_open = gui.menu_open
 	gui.menu_open = false
 	check_pending_bank()
 	if gui_menu_visible() {
