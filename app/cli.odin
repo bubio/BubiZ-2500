@@ -66,6 +66,7 @@ Options :: struct {
 	disk_dir:      string,
 	tape_dir:      string,
 	snap_dir:      string,
+	dbg_relay:     string, // 内部用: デバッガーのターミナルウィンドウで動く中継(-dbg_relay <socket>)
 	sound_dir:     string, // 録音(WAV)の保存先(空ならOS標準のミュージック)
 	state_dir:     string,
 	// イメージ
@@ -286,6 +287,10 @@ parse_args :: proc(args: []string) -> (opt: Options, err: string) {
 			v, ok := take_value(args, &i, name)
 			if !ok {return opt, "オプション -tapedir には値が必要です"}
 			opt.tape_dir = v
+		case "-dbg_relay":
+			v, ok := take_value(args, &i, name)
+			if !ok {return opt, "オプション -dbg_relay には値が必要です"}
+			opt.dbg_relay = v
 		case "-sounddir":
 			v, ok := take_value(args, &i, name)
 			if !ok {return opt, "オプション -sounddir には値が必要です"}

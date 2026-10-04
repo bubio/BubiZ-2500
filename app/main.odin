@@ -9,6 +9,10 @@ main :: proc() {
 	if err != "" {
 		exit_with_error(err)
 	}
+	// デバッガーのターミナルウィンドウの中で動く中継(エミュレーターが自分自身を起動する)
+	if opt.dbg_relay != "" {
+		os.exit(int(run_console_relay(strings.clone_to_cstring(opt.dbg_relay))))
+	}
 	if opt.help {
 		usage()
 		return

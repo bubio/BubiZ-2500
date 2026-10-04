@@ -148,7 +148,12 @@ bool bubiz_debugger_active(void);
 void bubiz_set_virtual_console(bool on);
 int bubiz_console_read(unsigned short *attr, char *buf, int cap);	// 出力の続きを取り出す。属性が同じ文字列ごと。無ければ0
 void bubiz_console_write_input(const char *s, int n);	// デバッガーへ文字を送る('\r'で行の確定)
-void bubiz_console_break(void);	// 実行中のCPUを止める(ESC相当)
+void bubiz_console_break(void);
+// 別ウィンドウのコンソール(Windows: 専用コンソール / Linux・macOS: ターミナルを開いて中継)。
+// 開けたらtrue。デバッガーを開く直前に呼ぶ。self_exeは自分自身の実行ファイルのパス
+bool bubiz_prepare_external_console(const char *self_exe);
+// ターミナルの中で動く中継(-dbg_relay <socket> で起動されたときに呼ぶ)。終了コードを返す
+int bubiz_run_console_relay(const char *socket_path);	// 実行中のCPUを止める(ESC相当)
 
 // 電源オフ要求(ゲストが要求した場合)の有無
 bool bubiz_power_off_requested(void);

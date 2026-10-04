@@ -6,6 +6,7 @@ package bubiz
 // 復帰(\r)・後退(\b)・改行(\n)と文字色を扱う。
 
 import "core:fmt"
+import "core:os"
 import "core:strings"
 
 import sapp "sokol:app"
@@ -36,6 +37,15 @@ dbgw: Debugger_Window
 
 // デバッガーを開き、ウィンドウを出す
 action_open_debugger :: proc() {
+	// まず別ウィンドウ(ターミナル / 専用コンソール)を試す。開けなければウィンドウ内のコンソールにする
+	if exe, err := os.get_executable_path(context.allocator); err == nil {
+		defer delete(exe)
+		if prepare_external_console(strings.clone_to_cstring(exe, context.temp_allocator)) {
+			open_debugger(0)
+			dbgw.open = false
+			return
+		}
+	}
 	open_debugger(0)
 	dbgw.open = true
 	dbgw.idle_frames = 0

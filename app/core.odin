@@ -110,6 +110,8 @@ foreign core {
 	stop_record_sound :: proc() ---
 
 	set_virtual_console :: proc(on: bool) ---
+	prepare_external_console :: proc(self_exe: cstring) -> bool ---
+	run_console_relay :: proc(socket_path: cstring) -> c.int ---
 	console_read :: proc(attr: ^u16, buf: [^]u8, cap: c.int) -> c.int ---
 	console_write_input :: proc(s: [^]u8, n: c.int) ---
 	console_break :: proc() ---
