@@ -253,12 +253,13 @@ frame :: proc "c" () {
 			fe.last_seq = 0
 		}
 		seq: u64
-		if copy_frame(raw_data(fe.src), w, h, &seq) && seq != fe.last_seq {
+		rgb_filter := cur_filter() == .RGB
+		// フィルタなしなら、中間バッファを経由せず直接テクスチャ用バッファへ取り出す
+		dst := fe.src if rgb_filter else fe.pixels
+		if len(dst) == int(w * h * 4) && copy_frame(raw_data(dst), w, h, &seq) && seq != fe.last_seq {
 			fe.last_seq = seq
-			if cur_filter() == .RGB {
+			if rgb_filter {
 				apply_rgb_filter(fe.src, int(w), int(h), frame_skip_line(), fe.filter_scale, fe.pixels)
-			} else {
-				copy(fe.pixels, fe.src)
 			}
 			sg.update_image(fe.image, {mip_levels = {0 = {ptr = raw_data(fe.pixels), size = uint(len(fe.pixels))}}})
 		}

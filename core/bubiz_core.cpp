@@ -86,13 +86,12 @@ static void publish_frame()
 #endif
 	size_t n = (size_t)b->width * b->height;
 	g_frame_rgba.resize(n * 4);
-	uint8_t *out = g_frame_rgba.data();
+	// 0x00RRGGBB を RGBA(メモリ順)へ。1画素を32ビット演算で変換する(リトルエンディアン前提)
+	uint32_t *out = (uint32_t *)g_frame_rgba.data();
+	const scrntype_t *src = b->pixels.data();
 	for(size_t i = 0; i < n; i++) {
-		scrntype_t c = b->pixels[i];
-		out[i * 4    ] = R_OF_COLOR(c);
-		out[i * 4 + 1] = G_OF_COLOR(c);
-		out[i * 4 + 2] = B_OF_COLOR(c);
-		out[i * 4 + 3] = 0xff;
+		uint32_t c = src[i];
+		out[i] = 0xff000000u | ((c & 0xff) << 16) | (c & 0xff00) | ((c >> 16) & 0xff);
 	}
 	g_frame_seq++;
 }
