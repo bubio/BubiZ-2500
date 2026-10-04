@@ -125,6 +125,10 @@ const char *bubiz_sound_device_name(int index);
 
 // ステートスロットの状態。保存済みなら true を返し、"ファイル名  YYYY-MM-DD hh:mm:ss" を buf に入れる
 bool bubiz_state_slot_info(int slot, char *buf, int cap);
+// スロットのステートファイルのパス。サムネイル画像は同じパスに ".png" を付けたもの(256x160)
+const char *bubiz_state_slot_path(int slot);
+// スロットのステートとサムネイルを削除する
+void bubiz_delete_state_slot(int slot);
 
 // ステート
 void bubiz_save_state(const char *path);

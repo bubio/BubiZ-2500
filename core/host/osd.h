@@ -279,6 +279,7 @@ public:
 	void stretch_bitmap(bitmap_t *dest, int dest_x, int dest_y, int dest_width, int dest_height, bitmap_t *source, int source_x, int source_y, int source_width, int source_height);
 #endif
 	void write_bitmap_to_file(bitmap_t *bitmap, const _TCHAR *file_path);
+	bool write_thumbnail(const _TCHAR *file_path, int thumb_width, int thumb_height);	// 現在の画面を縮小してPNGで保存
 
 	// common socket（未実装: 常に失敗を返す）
 #ifdef USE_SOCKET

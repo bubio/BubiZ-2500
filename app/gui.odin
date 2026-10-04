@@ -152,6 +152,7 @@ gui_new_frame :: proc() {
 		draw_status_bar()
 	}
 	draw_debugger_window()
+	draw_state_dialog()
 	draw_file_dialog()
 	draw_volume_dialog()
 	draw_about()
@@ -270,24 +271,8 @@ draw_control_menu :: proc() {
 		set_romaji_to_kana(opt_get("romaji_to_kana") == 0)
 	}
 	igSeparator()
-	if menu("Save State") {
-		for s in 0 ..< 10 {
-			info, _ := state_slot_label(s)
-			if item(fmt.ctprintf("State %d  %s##save%d", s, info, s)) {
-				save_state_slot(i32(s))
-			}
-		}
-		igEndMenu()
-	}
-	if menu("Load State") {
-		for s in 0 ..< 10 {
-			// 保存されていないスロットは読み込めないので選べないようにする
-			info, saved := state_slot_label(s)
-			if item(fmt.ctprintf("State %d  %s##load%d", s, info, s), nil, false, saved) {
-				load_state_slot(i32(s))
-			}
-		}
-		igEndMenu()
+	if item("Save / Load State...") {
+		action_open_state_dialog()
 	}
 	igSeparator()
 	if item("Debug Main CPU", "Ctrl+D") {

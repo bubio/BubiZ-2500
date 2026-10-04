@@ -20,6 +20,12 @@ when ODIN_OS == .Windows {
 	}
 }
 
+// ImTextureRef(1.92以降のテクスチャ参照)。どちらか片方だけを使う
+Im_Texture_Ref :: struct {
+	tex_data: rawptr,
+	tex_id:   u64,
+}
+
 Im_Vec2 :: struct {
 	x, y: f32,
 }
@@ -49,6 +55,8 @@ foreign imgui_native {
 	igEndChild :: proc() ---
 	igSetNextWindowPos :: proc(pos: Im_Vec2, cond: c.int) ---
 	igSetNextWindowSize :: proc(size: Im_Vec2, cond: c.int) ---
+	igSetNextWindowPosEx :: proc(pos: Im_Vec2, cond: c.int, pivot: Im_Vec2) ---
+	igSetNextWindowSizeConstraints :: proc(size_min, size_max: Im_Vec2, custom_callback: rawptr, custom_callback_data: rawptr) ---
 	igSetNextItemWidth :: proc(w: f32) ---
 	igSeparator :: proc() ---
 	igSameLine :: proc() ---
@@ -82,6 +90,15 @@ foreign imgui_native {
 	igSetKeyboardFocusHere :: proc() ---
 	igGetContentRegionAvail :: proc() -> Im_Vec2 ---
 	igGetWindowDrawList :: proc() -> rawptr ---
+	igButtonEx :: proc(label: cstring, size: Im_Vec2) -> bool ---
+	igGetFrameHeightWithSpacing :: proc() -> f32 ---
+	igIsItemHovered :: proc(flags: c.int) -> bool ---
+	igIsMouseDoubleClicked :: proc(button: c.int) -> bool ---
+	igCalcTextSize :: proc(text: cstring) -> Im_Vec2 ---
+	ImDrawList_AddImage :: proc(self: rawptr, tex: Im_Texture_Ref, p_min, p_max: Im_Vec2) ---
+	ImDrawList_AddRect :: proc(self: rawptr, p_min, p_max: Im_Vec2, col: u32) ---
+	ImDrawList_AddRectFilled :: proc(self: rawptr, p_min, p_max: Im_Vec2, col: u32) ---
+	ImDrawList_AddText :: proc(self: rawptr, pos: Im_Vec2, col: u32, text: cstring) ---
 	igGetCursorScreenPos :: proc() -> Im_Vec2 ---
 	igDummy :: proc(size: Im_Vec2) ---
 	igPushStyleColor :: proc(idx: c.int, col: u32) ---

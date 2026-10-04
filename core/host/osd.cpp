@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <vector>
 #ifdef _WIN32
 #include <windows.h>
 #else
@@ -403,6 +404,58 @@ void OSD::capture_screen()
 static const uint32_t *bitmap_row(void *ctx, int y)
 {
 	return (const uint32_t *)((bitmap_t *)ctx)->get_buffer(y);
+}
+
+struct thumb_rows_t {
+	std::vector<uint32_t> px;
+	int width;
+};
+
+static const uint32_t *thumb_row(void *ctx, int y)
+{
+	thumb_rows_t *t = (thumb_rows_t *)ctx;
+	return &t->px[(size_t)y * t->width];
+}
+
+bool OSD::write_thumbnail(const _TCHAR *file_path, int tw, int th)
+{
+	bitmap_t *src = &vm_screen_buffer;
+	if(!src->initialized() || src->width <= 0 || src->height <= 0 || tw <= 0 || th <= 0) {
+		return false;
+	}
+	const int sw = src->width, sh = src->height;
+	thumb_rows_t t;
+	t.width = tw;
+	t.px.resize((size_t)tw * th);
+	// 範囲の平均で縮小する
+	for(int y = 0; y < th; y++) {
+		int y0 = y * sh / th, y1 = (y + 1) * sh / th;
+		if(y1 <= y0) y1 = y0 + 1;
+		for(int x = 0; x < tw; x++) {
+			int x0 = x * sw / tw, x1 = (x + 1) * sw / tw;
+			if(x1 <= x0) x1 = x0 + 1;
+			uint32_t r = 0, g = 0, b = 0, n = 0;
+			for(int yy = y0; yy < y1 && yy < sh; yy++) {
+				const uint32_t *line = (const uint32_t *)src->get_buffer(yy);
+				for(int xx = x0; xx < x1 && xx < sw; xx++) {
+					uint32_t p = line[xx];
+					r += (p >> 16) & 0xFF;
+					g += (p >> 8) & 0xFF;
+					b += p & 0xFF;
+					n++;
+				}
+			}
+			if(n == 0) n = 1;
+			t.px[(size_t)y * tw + x] = ((r / n) << 16) | ((g / n) << 8) | (b / n);
+		}
+	}
+	FILE *fp = fopen(file_path, "wb");
+	if(fp == NULL) {
+		return false;
+	}
+	bool ok = write_png_rgb(fp, tw, th, thumb_row, &t);
+	fclose(fp);
+	return ok;
 }
 
 void OSD::write_bitmap_to_file(bitmap_t *bitmap, const _TCHAR *file_path)

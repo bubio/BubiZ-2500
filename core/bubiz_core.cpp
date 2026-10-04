@@ -532,9 +532,33 @@ bool bubiz_state_slot_info(int slot, char *buf, int cap)
 	return true;
 }
 
+const char *bubiz_state_slot_path(int slot)
+{
+	static std::string path;
+	path = g_emu ? g_emu->state_file_path(slot) : "";
+	return path.c_str();
+}
+
+void bubiz_delete_state_slot(int slot)
+{
+	if(g_emu == NULL) {
+		return;
+	}
+	std::string path = g_emu->state_file_path(slot);
+	remove(path.c_str());
+	remove((path + ".png").c_str());
+}
+
 void bubiz_save_state_slot(int slot)
 {
-	post([=]() { if(g_emu) g_emu->save_state(g_emu->state_file_path(slot)); });
+	post([=]() {
+		if(g_emu) {
+			std::string path = g_emu->state_file_path(slot);
+			g_emu->save_state(path.c_str());
+			// 一覧に出すサムネイル
+			g_emu->get_osd()->write_thumbnail((path + ".png").c_str(), 256, 160);
+		}
+	});
 }
 
 void bubiz_load_state_slot(int slot)
