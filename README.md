@@ -81,6 +81,8 @@ BubiZ-2500 disk.d88
 
 コマンドラインオプション、ホットキー、設定ファイルなどの詳細は、[使い方](docs/usage.md) を参照してください。
 
+ソースからビルドする場合は、[ビルド手順](docs/build.md) を参照してください。
+
 ## ライセンス
 
 - BubiZ-2500 は [GNU General Public License v2](LICENSE) で提供します。
