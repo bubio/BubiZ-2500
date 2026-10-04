@@ -534,6 +534,15 @@ void OSD::mute_sound()
 	sound_muted = true;
 }
 
+void OSD::set_sound_format(int rate, int samples)
+{
+	std::lock_guard<std::mutex> lock(sound_mutex);
+	sound_rate = rate;
+	sound_samples = samples;
+	sound_ring.assign((size_t)samples * 2 * 2, 0);
+	sound_ring_r = sound_ring_w = sound_ring_fill = 0;
+}
+
 void OSD::stop_sound()
 {
 	std::lock_guard<std::mutex> lock(sound_mutex);
