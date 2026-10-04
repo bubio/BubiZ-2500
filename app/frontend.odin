@@ -244,12 +244,12 @@ frame :: proc "c" () {
 		emu_frames := sync.atomic_exchange(&fe.emu_frames, 0)
 		gui.fps = f64(emu_frames) / fe.fps_time
 		if fe.opt.show_fps {
-		sapp.set_window_title(
-			strings.clone_to_cstring(
-				fmt.tprintf("BubiZ-2500 - %.1f fps (表示 %.1f fps)", f64(emu_frames) / fe.fps_time, f64(fe.fps_frames) / fe.fps_time),
-				context.temp_allocator,
-			),
-		)
+			sapp.set_window_title(
+				strings.clone_to_cstring(
+					fmt.tprintf("BubiZ-2500 - %.1f fps (表示 %.1f fps)", f64(emu_frames) / fe.fps_time, f64(fe.fps_frames) / fe.fps_time),
+					context.temp_allocator,
+				),
+			)
 		}
 		fe.fps_time = 0
 		fe.fps_frames = 0
