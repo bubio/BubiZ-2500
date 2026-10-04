@@ -57,7 +57,7 @@ known_folder :: proc(which: Known_Folder) -> string {
 		return ""
 	}
 	defer win.CoTaskMemFree(rawptr(path))
-	s, err := win.wstring_to_utf8(([^]u16)(path), -1, context.allocator)
+	s, err := win.wstring_to_utf8(transmute(win.wstring)path, -1, context.allocator)
 	if err != nil {
 		return ""
 	}
