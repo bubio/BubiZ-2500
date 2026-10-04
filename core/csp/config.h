@@ -227,8 +227,10 @@ typedef struct {
 	
 	// BubiZ-2500のホスト層(Win32版の同名項目の代わり)
 	#ifdef BUBIZ_HOST
-		bool show_status_bar;
-		bool wait_vsync;
+		#ifndef _WIN32	// Windowsでは上のwin32用の定義を使う
+			bool show_status_bar;
+			bool wait_vsync;
+		#endif
 		int keyboard_joystick;	// キーボードをジョイスティックにする 0:しない 1:#1 2:#2
 	#endif
 	// debug
