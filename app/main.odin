@@ -5,6 +5,9 @@ import "core:os"
 import "core:strings"
 
 main :: proc() {
+	when ODIN_OS == .Windows {
+		attach_parent_console()
+	}
 	opt, err := parse_args(os.args[1:])
 	if err != "" {
 		exit_with_error(err)

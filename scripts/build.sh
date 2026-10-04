@@ -60,6 +60,8 @@ if [ "$(uname -s)" = "Darwin" ]; then
   ODIN_FLAGS+=(-minimum-os-version:14.0.0)
 fi
 if [ "$WINDOWS" = 1 ]; then
+  # コンソールを開かないGUIアプリにし、アイコンとマニフェスト(UTF-8のパス)を埋め込む
+  ODIN_FLAGS+=(-subsystem:windows "-resource:$(cygpath -w "$ROOT/packaging/windows/bubiz.rc")")
   LINK_FLAGS="/LIBPATH:$(cygpath -w "$BUILD_DIR/core")"
 else
   LINK_FLAGS="-L$BUILD_DIR/core"

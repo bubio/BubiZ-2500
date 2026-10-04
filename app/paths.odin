@@ -49,6 +49,12 @@ default_data_dir :: proc() -> string {
 // name は "Pictures" / "Music"、xdg_key は "PICTURES" / "MUSIC"
 default_user_media_dir :: proc(name, xdg_key: string) -> string {
 	when ODIN_OS == .Windows {
+		// OneDriveなどへ移されている場合も含め、Windowsが管理する本来の場所を使う
+		folder := known_folder(.Pictures if name == "Pictures" else .Music)
+		if folder != "" {
+			defer delete(folder)
+			return fmt.aprintf("%s\\%s", folder, APP_DIR_NAME)
+		}
 		base := os.get_env("USERPROFILE", context.temp_allocator)
 		if base != "" {
 			return fmt.aprintf("%s\\%s\\%s", base, name, APP_DIR_NAME)
