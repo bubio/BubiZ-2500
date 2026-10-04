@@ -67,6 +67,13 @@ apply_options :: proc(opt: Options) {
 	if opt.monitor_type >= 0 {set_config("monitor_type", i32(opt.monitor_type))}
 	if opt.option_switch >= 0 {set_config("option_switch", i32(opt.option_switch))}
 	if opt.scan_line >= 0 {set_config("scan_line", i32(opt.scan_line))}
+	if opt.aspect_set {
+		// 640x400比率 / 640x480(4:3)比率。ウィンドウとフルスクリーンの両方に適用する
+		set_option("window_stretch_type", 1 if opt.aspect_480 else 0)
+		set_option("fullscreen_stretch_type", 2 if opt.aspect_480 else 1)
+	}
+	if opt.filter_set {set_option("filter_type", i32(opt.filter))}
+	if opt.joystick_set {set_option("keyboard_joystick", 1 if opt.joystick else 0)}
 	if opt.sample_freq > 0 {
 		for hz, idx in SOUND_RATES {
 			if hz == opt.sample_freq {

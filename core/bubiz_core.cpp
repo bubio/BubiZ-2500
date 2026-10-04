@@ -483,3 +483,326 @@ bool bubiz_debugger_active(void)
 	return false;
 #endif
 }
+
+// ---------------------------------------------------------------------------
+// メディア(追加)・履歴・自動キー・汎用設定
+// ---------------------------------------------------------------------------
+
+bool bubiz_create_blank_floppy(const char *path, int type)
+{
+	return g_emu && g_emu->create_blank_floppy_disk(path, type == 0 ? 0x00 : 0x10);
+}
+
+bool bubiz_create_blank_hard_disk(const char *path)
+{
+	return g_emu && g_emu->create_blank_hard_disk(path, 256, 33, 4, 615);
+}
+
+bool bubiz_floppy_protected(int drive)
+{
+	return g_emu && g_emu->is_floppy_disk_protected(drive);
+}
+
+void bubiz_set_floppy_protected(int drive, bool protect)
+{
+	post([=]() { if(g_emu) g_emu->is_floppy_disk_protected(drive, protect); });
+}
+
+int bubiz_floppy_bank_count(int drive)
+{
+	return (g_emu && drive >= 0 && drive < USE_FLOPPY_DISK) ? g_emu->d88_file[drive].bank_num : 0;
+}
+
+const char *bubiz_floppy_bank_name(int drive, int bank)
+{
+	if(g_emu && drive >= 0 && drive < USE_FLOPPY_DISK && bank >= 0 && bank < g_emu->d88_file[drive].bank_num) {
+		return g_emu->d88_file[drive].disk_name[bank];
+	}
+	return "";
+}
+
+int bubiz_floppy_cur_bank(int drive)
+{
+	return (g_emu && drive >= 0 && drive < USE_FLOPPY_DISK) ? g_emu->d88_file[drive].cur_bank : 0;
+}
+
+void bubiz_select_floppy_bank(int drive, int bank)
+{
+	post([=]() {
+		if(g_emu && drive >= 0 && drive < USE_FLOPPY_DISK && g_emu->d88_file[drive].bank_num > 0) {
+			std::string path = g_emu->d88_file[drive].path;
+			g_emu->open_floppy_disk(drive, path.c_str(), bank);
+		}
+	});
+}
+
+const char *bubiz_floppy_path(int drive)
+{
+	if(g_emu && drive >= 0 && drive < USE_FLOPPY_DISK && g_emu->is_floppy_disk_inserted(drive)) {
+		return g_emu->d88_file[drive].path;
+	}
+	return "";
+}
+
+const char *bubiz_tape_message(int drive)
+{
+	return g_emu ? g_emu->get_tape_message(drive) : "";
+}
+
+bool bubiz_hard_disk_inserted(int drive)
+{
+	return g_emu && g_emu->is_hard_disk_inserted(drive);
+}
+
+bool bubiz_tape_inserted(int drive)
+{
+	return g_emu && g_emu->is_tape_inserted(drive);
+}
+
+bool bubiz_tape_playing(int drive)
+{
+	return g_emu && g_emu->is_tape_playing(drive);
+}
+
+bool bubiz_tape_recording(int drive)
+{
+	return g_emu && g_emu->is_tape_recording(drive);
+}
+
+void bubiz_tape_button(int drive, int button)
+{
+	post([=]() {
+		if(!g_emu) return;
+		switch(button) {
+		case 0: g_emu->push_play(drive); break;
+		case 1: g_emu->push_stop(drive); break;
+		case 2: g_emu->push_fast_forward(drive); break;
+		case 3: g_emu->push_fast_rewind(drive); break;
+		}
+	});
+}
+
+// 履歴の保存先を引く。範囲外ならNULL
+static _TCHAR (*recent_list(int kind, int drive))[_MAX_PATH]
+{
+	switch(kind) {
+	case 0: if(drive >= 0 && drive < USE_FLOPPY_DISK) return config.recent_floppy_disk_path[drive]; break;
+	case 1: if(drive >= 0 && drive < USE_HARD_DISK) return config.recent_hard_disk_path[drive]; break;
+	case 2: if(drive >= 0 && drive < USE_TAPE) return config.recent_tape_path[drive]; break;
+	}
+	return NULL;
+}
+
+const char *bubiz_recent_path(int kind, int drive, int index)
+{
+	_TCHAR (*list)[_MAX_PATH] = recent_list(kind, drive);
+	if(list == NULL || index < 0 || index >= MAX_HISTORY) {
+		return "";
+	}
+	return list[index];
+}
+
+void bubiz_add_recent(int kind, int drive, const char *path)
+{
+	_TCHAR (*recent)[_MAX_PATH] = recent_list(kind, drive);
+	if(recent == NULL) {
+		return;
+	}
+	// 元の実装(UPDATE_HISTORY)と同じ: 既存の同じパスは先頭へ移す
+	int index = MAX_HISTORY - 1;
+	for(int i = 0; i < MAX_HISTORY; i++) {
+		if(_tcsicmp(recent[i], path) == 0) {
+			index = i;
+			break;
+		}
+	}
+	for(int i = index; i > 0; i--) {
+		my_tcscpy_s(recent[i], _MAX_PATH, recent[i - 1]);
+	}
+	my_tcscpy_s(recent[0], _MAX_PATH, path);
+}
+
+static _TCHAR *initial_dir_ptr(int kind)
+{
+	switch(kind) {
+	case 0: return config.initial_floppy_disk_dir;
+	case 1: return config.initial_hard_disk_dir;
+	case 2: return config.initial_tape_dir;
+	}
+	return NULL;
+}
+
+const char *bubiz_initial_dir(int kind)
+{
+	_TCHAR *p = initial_dir_ptr(kind);
+	return p ? p : "";
+}
+
+void bubiz_set_initial_dir(int kind, const char *dir)
+{
+	_TCHAR *p = initial_dir_ptr(kind);
+	if(p) {
+		my_tcscpy_s(p, _MAX_PATH, dir);
+	}
+}
+
+void bubiz_paste_text(const char *text, int size)
+{
+	if(size <= 0) {
+		return;
+	}
+	std::string t(text, size);
+	post([=]() {
+		if(g_emu) {
+			g_emu->stop_auto_key();
+			g_emu->set_auto_key_list(const_cast<char *>(t.data()), (int)t.size());
+			g_emu->start_auto_key();
+		}
+	});
+}
+
+void bubiz_stop_auto_key(void)
+{
+	post([=]() { if(g_emu) g_emu->stop_auto_key(); });
+}
+
+void bubiz_set_romaji_to_kana(bool enable)
+{
+	post([=]() {
+		if(g_emu) {
+			g_emu->set_auto_key_char(enable ? 1 : 0);
+		}
+		config.romaji_to_kana = enable;
+	});
+}
+
+uint32_t bubiz_floppy_accessed(void)
+{
+	return g_emu ? g_emu->is_floppy_disk_accessed() : 0;
+}
+
+uint32_t bubiz_hard_disk_accessed(void)
+{
+	return g_emu ? g_emu->is_hard_disk_accessed() : 0;
+}
+
+uint32_t bubiz_tape_accessed(void)
+{
+	return 0;
+}
+
+// 汎用の設定項目
+namespace {
+struct OptionEntry {
+	const char *name;
+	void *ptr;
+	char type;	// 'i':int 'b':bool
+	int count;	// 配列の要素数(単独は1)
+	bool apply;	// 変更時にupdate_config()を呼ぶか
+};
+}
+
+static const OptionEntry g_options[] = {
+	{"boot_mode", &config.boot_mode, 'i', 1, true},
+	{"option_switch", &config.option_switch, 'i', 1, true},
+	{"monitor_type", &config.monitor_type, 'i', 1, true},
+	{"scan_line", &config.scan_line, 'b', 1, true},
+	{"printer_type", &config.printer_type, 'i', 1, false},
+	{"cpu_power", &config.cpu_power, 'i', 1, true},
+	{"full_speed", &config.full_speed, 'b', 1, false},
+	{"drive_vm_in_opecode", &config.drive_vm_in_opecode, 'b', 1, false},
+	{"correct_disk_timing", config.correct_disk_timing, 'b', USE_FLOPPY_DISK, false},
+	{"ignore_disk_crc", config.ignore_disk_crc, 'b', USE_FLOPPY_DISK, false},
+	{"wave_shaper", config.wave_shaper, 'b', USE_TAPE, false},
+	{"window_mode", &config.window_mode, 'i', 1, false},
+	{"window_stretch_type", &config.window_stretch_type, 'i', 1, false},
+	{"fullscreen_stretch_type", &config.fullscreen_stretch_type, 'i', 1, false},
+	{"rotate_type", &config.rotate_type, 'i', 1, false},
+	{"filter_type", &config.filter_type, 'i', 1, false},
+	{"sound_frequency", &config.sound_frequency, 'i', 1, true},
+	{"sound_latency", &config.sound_latency, 'i', 1, true},
+	{"sound_strict_rendering", &config.sound_strict_rendering, 'b', 1, true},
+	{"sound_noise_fdd", &config.sound_noise_fdd, 'b', 1, true},
+	{"sound_noise_cmt", &config.sound_noise_cmt, 'b', 1, true},
+	{"sound_tape_signal", &config.sound_tape_signal, 'b', 1, false},
+	{"sound_tape_voice", &config.sound_tape_voice, 'b', 1, false},
+	{"sound_volume_l", config.sound_volume_l, 'i', USE_SOUND_VOLUME, false},
+	{"sound_volume_r", config.sound_volume_r, 'i', USE_SOUND_VOLUME, false},
+	{"use_joy_to_key", &config.use_joy_to_key, 'b', 1, false},
+	{"romaji_to_kana", &config.romaji_to_kana, 'b', 1, false},
+	{"show_status_bar", &config.show_status_bar, 'b', 1, false},
+	{"wait_vsync", &config.wait_vsync, 'b', 1, false},
+	{"keyboard_joystick", &config.keyboard_joystick, 'i', 1, false},
+};
+
+static const OptionEntry *find_option(const char *key, int *index)
+{
+	std::string k = key;
+	int idx = 0;
+	size_t colon = k.find(':');
+	if(colon != std::string::npos) {
+		idx = atoi(k.c_str() + colon + 1);
+		k = k.substr(0, colon);
+	}
+	for(const OptionEntry &e : g_options) {
+		if(k == e.name && idx >= 0 && idx < e.count) {
+			*index = idx;
+			return &e;
+		}
+	}
+	return NULL;
+}
+
+bool bubiz_set_option(const char *key, int value)
+{
+	if(!g_config_loaded) {
+		bubiz_load_config(CONFIG_NAME ".ini");
+	}
+	int idx;
+	const OptionEntry *e = find_option(key, &idx);
+	if(e == NULL) {
+		return false;
+	}
+	if(e->type == 'b') {
+		((bool *)e->ptr)[idx] = (value != 0);
+	} else {
+		((int *)e->ptr)[idx] = value;
+	}
+	if(e->apply) {
+		post([=]() { if(g_emu) g_emu->update_config(); });
+	}
+	// 音量はVMへも反映する
+	if(std::string(e->name).compare(0, 12, "sound_volume") == 0) {
+		post([=]() {
+			if(g_emu) {
+				for(int i = 0; i < USE_SOUND_VOLUME; i++) {
+					g_emu->set_sound_device_volume(i, config.sound_volume_l[i], config.sound_volume_r[i]);
+				}
+			}
+		});
+	}
+	return true;
+}
+
+int bubiz_get_option(const char *key)
+{
+	if(!g_config_loaded) {
+		bubiz_load_config(CONFIG_NAME ".ini");
+	}
+	int idx;
+	const OptionEntry *e = find_option(key, &idx);
+	if(e == NULL) {
+		return -1;
+	}
+	return e->type == 'b' ? (((bool *)e->ptr)[idx] ? 1 : 0) : ((int *)e->ptr)[idx];
+}
+
+int bubiz_sound_device_count(void)
+{
+	return USE_SOUND_VOLUME;
+}
+
+const char *bubiz_sound_device_name(int index)
+{
+	return (index >= 0 && index < USE_SOUND_VOLUME) ? sound_device_caption[index] : "";
+}

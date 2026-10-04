@@ -26,7 +26,6 @@ Frontend :: struct {
 	sampler:    sg.Sampler, // 最近傍
 	sampler_linear: sg.Sampler, // 線形補間
 	src:        []u8, // コアから受け取った生のフレーム(RGBA8)
-	filter:     Screen_Filter,
 	filter_scale: int, // 現在のフィルタの倍率(1〜3)
 	tex_w:      i32,
 	tex_h:      i32,
@@ -36,6 +35,7 @@ Frontend :: struct {
 	emu_thread: ^thread.Thread,
 	running:    bool, // atomic: falseにするとエミュレーションスレッドが終わる
 	paused:     bool, // atomic
+	audio_rate: i32, // 現在開いている音声出力の周波数
 	emu_frames: int, // atomic: FPS表示用の、エミュレーションを進めたフレーム数
 	last_seq:   u64, // 最後にテクスチャへ反映したフレームの番号
 	// 時間
@@ -47,8 +47,7 @@ Frontend :: struct {
 	mouse_dx:   i32,
 	mouse_dy:   i32,
 	mouse_btn:  i32, // b0=左 b1=右 b2=中
-	// キーボードによるジョイスティック
-	joy_mode:   bool,
+	// キーボードによるジョイスティック(どのポートかは設定keyboard_joystick: 1=#1, 2=#2)
 	joy_status: u32, // bit0-3: 上下左右, bit4-: ボタン
 }
 
@@ -57,15 +56,16 @@ fe: Frontend
 run_frontend :: proc(opt: Options) {
 	fe.opt = opt
 
-	// 縦横比に応じた標準サイズ(640x400 / 640x480)を、-half / -double で倍率変更する
-	base_h := i32(opt.aspect_480 ? 480 : 400)
-	w, h := i32(640), base_h + MENU_HEIGHT_LOGICAL
+	// 設定の倍率(window_mode)でウィンドウの大きさを決める。-half / -double は上書き
+	scale := max(1, get_option("window_mode") + 1)
+	w, h := window_size_for_scale(int(scale))
 	switch opt.window_size {
 	case .Full:
 	case .Half:
-		w, h = 320, base_h / 2 + MENU_HEIGHT_LOGICAL
+		w, h = window_size_for_scale(1)
+		w, h = w / 2, (h - MENU_HEIGHT_LOGICAL - STATUS_HEIGHT_LOGICAL) / 2 + MENU_HEIGHT_LOGICAL + STATUS_HEIGHT_LOGICAL
 	case .Double:
-		w, h = 1280, base_h * 2 + MENU_HEIGHT_LOGICAL
+		w, h = window_size_for_scale(2)
 	}
 	if opt.width > 0 {w = i32(opt.width)}
 	if opt.height > 0 {h = i32(opt.height)}
@@ -80,6 +80,9 @@ run_frontend :: proc(opt: Options) {
 			height = h,
 			window_title = "BubiZ-2500",
 			fullscreen = opt.fullscreen,
+			swap_interval = 1 if get_option("wait_vsync") != 0 else 0,
+			enable_clipboard = true,
+			clipboard_size = 8192,
 			enable_dragndrop = true,
 			max_dropped_files = 4,
 			logger = {func = slog.func},
@@ -98,11 +101,9 @@ init :: proc "c" () {
 	gui_init()
 	fe.sampler = sg.make_sampler({min_filter = .NEAREST, mag_filter = .NEAREST, wrap_u = .CLAMP_TO_EDGE, wrap_v = .CLAMP_TO_EDGE})
 	fe.sampler_linear = sg.make_sampler({min_filter = .LINEAR, mag_filter = .LINEAR, wrap_u = .CLAMP_TO_EDGE, wrap_v = .CLAMP_TO_EDGE})
-	fe.filter = fe.opt.filter
 	if fe.opt.mouse {
 		enable_mouse(true)
 	}
-	fe.joy_mode = fe.opt.joystick
 	if fe.opt.debug {
 		open_debugger(0)
 	}
@@ -114,21 +115,23 @@ init :: proc "c" () {
 	}
 
 	if fe.opt.sound {
-		saudio.setup(
-			{
-				sample_rate = i32(bubiz_sound_rate_value()),
-				num_channels = 2,
-				buffer_frames = 2048,
-				stream_cb = audio_stream,
-				logger = {func = slog.func},
-			},
-		)
+		setup_audio()
 	}
 }
 
+// コアのサンプリング周波数に合わせて出力を開く(周波数はリセットで変わるので、変わったら開き直す)
 @(private = "file")
-bubiz_sound_rate_value :: proc() -> int {
-	return int(sound_rate())
+setup_audio :: proc() {
+	fe.audio_rate = sound_rate()
+	saudio.setup(
+		{
+			sample_rate = fe.audio_rate,
+			num_channels = 2,
+			buffer_frames = 2048,
+			stream_cb = audio_stream,
+			logger = {func = slog.func},
+		},
+	)
 }
 
 // オーディオスレッドから呼ばれる: コアが生成した音を取り出してfloatに変換する
@@ -187,10 +190,11 @@ frame :: proc "c" () {
 	screen_size(&w, &h)
 	if w > 0 && h > 0 {
 		tw, th := w, h
-		if fe.filter == .RGB {
+		if cur_filter() == .RGB {
 			// 表示の大きさに合わせて倍率を選ぶ(元の実装と同じ考え方)。倍率が変わったら作り直す
-			_, _, qw, _ := quad_rect()
-			scale := filter_scale_for(qw / f32(w))
+			_, _, qw, qh := quad_rect()
+			disp := qh if is_rotated() else qw
+			scale := filter_scale_for(disp / f32(w))
 			if scale != fe.filter_scale {
 				fe.filter_scale = scale
 				fe.last_seq = 0
@@ -208,7 +212,7 @@ frame :: proc "c" () {
 		seq: u64
 		if copy_frame(raw_data(fe.src), w, h, &seq) && seq != fe.last_seq {
 			fe.last_seq = seq
-			if fe.filter == .RGB {
+			if cur_filter() == .RGB {
 				apply_rgb_filter(fe.src, int(w), int(h), frame_skip_line(), fe.filter_scale, fe.pixels)
 			} else {
 				copy(fe.pixels, fe.src)
@@ -225,6 +229,10 @@ frame :: proc "c" () {
 	sg.end_pass()
 	sg.commit()
 
+	if fe.opt.sound && sound_rate() != fe.audio_rate {
+		saudio.shutdown()
+		setup_audio()
+	}
 	if power_off_requested() {
 		sapp.request_quit()
 	}
@@ -232,44 +240,94 @@ frame :: proc "c" () {
 	// FPS表示
 	fe.fps_time += dt
 	fe.fps_frames += 1
-	if fe.opt.show_fps && fe.fps_time >= 1.0 {
+	if fe.fps_time >= 1.0 {
 		emu_frames := sync.atomic_exchange(&fe.emu_frames, 0)
+		gui.fps = f64(emu_frames) / fe.fps_time
+		if fe.opt.show_fps {
 		sapp.set_window_title(
 			strings.clone_to_cstring(
 				fmt.tprintf("BubiZ-2500 - %.1f fps (表示 %.1f fps)", f64(emu_frames) / fe.fps_time, f64(fe.fps_frames) / fe.fps_time),
 				context.temp_allocator,
 			),
 		)
+		}
 		fe.fps_time = 0
 		fe.fps_frames = 0
 	}
 	free_all(context.temp_allocator)
 }
 
-// アスペクト比を保ってウィンドウ内に収めたときの、描画する矩形(x, y, 幅, 高さ)
+// 現在の画面フィルタ(RFは未実装のためなし扱い)
 @(private = "file")
-quad_rect :: proc() -> (x0, y0, qw, qh: f32) {
-	aw, ah: i32
-	screen_aspect(&aw, &ah)
-	if aw <= 0 || ah <= 0 {
-		aw, ah = fe.tex_w, fe.tex_h
-	}
-	if aw <= 0 || ah <= 0 {
-		return 0, 0, 0, 0
-	}
-	// コアは640x480(4:3)比率を返すので、400比率が選ばれている場合は高さを400にする
-	if !fe.opt.aspect_480 && aw == 640 && ah == 480 {
-		ah = 400
-	}
-	// メニューバーの下の領域に収める
-	top := gui_top_offset()
-	ww, wh := f32(sapp.width()), f32(sapp.height()) - top
-	scale := min(ww / f32(aw), wh / f32(ah))
-	qw, qh = f32(aw) * scale, f32(ah) * scale
-	return (ww - qw) * 0.5, top + (wh - qh) * 0.5, qw, qh
+cur_filter :: proc() -> Screen_Filter {
+	return .RGB if get_option("filter_type") == 1 else .None
 }
 
-// アスペクト比を保ってウィンドウ内に描く
+// 画面を90度/270度回している(縦横が入れ替わる)か
+@(private = "file")
+is_rotated :: proc() -> bool {
+	r := get_option("rotate_type")
+	return r == 1 || r == 3
+}
+
+// キーボードジョイスティックのポート(0始まり)。使わないときは-1
+kb_joystick_port :: proc() -> int {
+	return int(get_option("keyboard_joystick")) - 1
+}
+
+// エミュレーション画面を描く矩形(x, y, 幅, 高さ)。メニューバーとステータスバーを除いた領域に、
+// 元の実装(osd_screen.cpp)と同じ考え方で収める。
+//   ウィンドウ: window_stretch_type 0=640x400比率 1=640x480比率
+//   フルスクリーン: fullscreen_stretch_type 0=ドットバイドット 1=640x400比率 2=640x480比率 3=全面
+@(private = "file")
+quad_rect :: proc() -> (x0, y0, qw, qh: f32) {
+	top := gui_top_offset()
+	area_w := f32(sapp.width())
+	area_h := f32(sapp.height()) - top - gui_bottom_offset()
+	if area_w <= 0 || area_h <= 0 {
+		return 0, 0, 0, 0
+	}
+	// 比率の基準(回転すると縦横が入れ替わる)
+	w400, h400, w480, h480 := f32(640), f32(400), f32(640), f32(480)
+	if is_rotated() {
+		w400, h400 = h400, w400
+		w480, h480 = h480, w480
+	}
+	fit :: proc(aw, ah, area_w, area_h: f32) -> (f32, f32) {
+		s := min(area_w / aw, area_h / ah)
+		return aw * s, ah * s
+	}
+	if !sapp.is_fullscreen() {
+		if get_option("window_stretch_type") == 1 {
+			qw, qh = fit(w480, h480, area_w, area_h)
+		} else {
+			qw, qh = fit(w400, h400, area_w, area_h)
+		}
+	} else {
+		switch get_option("fullscreen_stretch_type") {
+		case 0:
+			// ドットバイドット: 整数倍で収まる最大の倍率(1倍未満にはしない)
+			px := int(area_w / w400)
+			py := int(area_h / h400)
+			pow := 1
+			if py >= px && px > 1 {
+				pow = px
+			} else if px >= py && py > 1 {
+				pow = py
+			}
+			qw, qh = w400 * f32(pow), h400 * f32(pow)
+		case 2:
+			qw, qh = fit(w480, h480, area_w, area_h)
+		case 3:
+			qw, qh = area_w, area_h
+		case:
+			qw, qh = fit(w400, h400, area_w, area_h)
+		}
+	}
+	return (area_w - qw) * 0.5, top + (area_h - qh) * 0.5, qw, qh
+}
+
+// 回転と比率を反映して、画面を描く
 @(private = "file")
 draw_quad :: proc() {
 	if fe.tex_w == 0 {
@@ -283,13 +341,21 @@ draw_quad :: proc() {
 	sgl.matrix_mode_projection()
 	sgl.ortho(0, ww, wh, 0, -1, 1)
 	sgl.enable_texture()
-	sgl.texture(fe.view, fe.sampler_linear if (fe.opt.interp || fe.filter != .None) else fe.sampler)
+	sgl.texture(fe.view, fe.sampler_linear if (fe.opt.interp || cur_filter() != .None) else fe.sampler)
+	// 画面の四隅(左上・右上・右下・左下)に対応するテクスチャ座標。回転ごとに巡回させる
+	uv := [4][2]f32{{0, 0}, {1, 0}, {1, 1}, {0, 1}}
+	shift := 0
+	switch get_option("rotate_type") {
+	case 1: shift = 3 // +90度(時計回り)
+	case 2: shift = 2
+	case 3: shift = 1 // -90度
+	}
 	sgl.begin_quads()
 	sgl.c3f(1, 1, 1)
-	sgl.v2f_t2f(x0, y0, 0, 0)
-	sgl.v2f_t2f(x0 + qw, y0, 1, 0)
-	sgl.v2f_t2f(x0 + qw, y0 + qh, 1, 1)
-	sgl.v2f_t2f(x0, y0 + qh, 0, 1)
+	sgl.v2f_t2f(x0, y0, uv[shift % 4][0], uv[shift % 4][1])
+	sgl.v2f_t2f(x0 + qw, y0, uv[(1 + shift) % 4][0], uv[(1 + shift) % 4][1])
+	sgl.v2f_t2f(x0 + qw, y0 + qh, uv[(2 + shift) % 4][0], uv[(2 + shift) % 4][1])
+	sgl.v2f_t2f(x0, y0 + qh, uv[(3 + shift) % 4][0], uv[(3 + shift) % 4][1])
 	sgl.end()
 }
 
@@ -306,7 +372,7 @@ event :: proc "c" (e: ^sapp.Event) {
 		if handle_hotkey(e) {
 			return
 		}
-		if fe.joy_mode && joy_key(e.key_code, true) {
+		if kb_joystick_port() >= 0 && joy_key(e.key_code, true) {
 			return
 		}
 		vk := to_vk(e.key_code)
@@ -314,7 +380,7 @@ event :: proc "c" (e: ^sapp.Event) {
 			key_down(i32(vk), e.key_repeat)
 		}
 	case .KEY_UP:
-		if fe.joy_mode && joy_key(e.key_code, false) {
+		if kb_joystick_port() >= 0 && joy_key(e.key_code, false) {
 			return
 		}
 		vk := to_vk(e.key_code)
@@ -389,7 +455,7 @@ handle_hotkey :: proc(e: ^sapp.Event) -> bool {
 		}
 	case .F:
 		if ctrl {
-			fe.filter = .None if fe.filter == .RGB else .RGB
+			set_option("filter_type", 0 if cur_filter() == .RGB else 1)
 			fe.last_seq = 0
 			return true
 		}
@@ -417,9 +483,12 @@ action_screenshot :: proc() {
 }
 
 action_toggle_joystick :: proc() {
-	fe.joy_mode = !fe.joy_mode
+	port := kb_joystick_port()
+	if port >= 0 {
+		set_joystick(i32(port), 0)
+	}
+	set_option("keyboard_joystick", 0 if port >= 0 else 1)
 	fe.joy_status = 0
-	set_joystick(0, 0)
 }
 
 // キーボードをジョイスティックとして扱う。対象のキーならtrueを返す
@@ -441,7 +510,7 @@ joy_key :: proc(k: sapp.Keycode, down: bool) -> bool {
 	} else {
 		fe.joy_status &= ~bit
 	}
-	set_joystick(0, fe.joy_status)
+	set_joystick(i32(max(0, kb_joystick_port())), fe.joy_status)
 	return true
 }
 
@@ -513,7 +582,7 @@ emu_thread_proc :: proc() {
 		run()
 		sync.atomic_add(&fe.emu_frames, 1)
 
-		if !fe.opt.wait {
+		if !fe.opt.wait || get_option("full_speed") != 0 {
 			continue // 全速
 		}
 		// 速度比(%)を考慮した1フレームの時間

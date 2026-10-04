@@ -1,6 +1,7 @@
 package bubiz
 
-// GUI: メニューバー・ファイル選択・バージョン情報(Dear ImGui)
+// GUI: メニューバー・ステータスバー・ファイル選択・各種ダイアログ(Dear ImGui)
+// 構成と項目名は、元のEmuZ-2500(Win32版 res/mz2500.rc)のメニューに合わせている
 
 import "core:fmt"
 import "core:os"
@@ -13,16 +14,33 @@ import simgui "sokol:imgui"
 import slog "sokol:log"
 
 MENU_HEIGHT_LOGICAL :: 22 // ImGuiの既定(フォント14px + 余白)でのメニューバーの高さ
+STATUS_HEIGHT_LOGICAL :: 24 // ステータスバーの高さ
 
-File_Purpose :: enum {
+// 履歴・初期ディレクトリの種別(コアのkindと同じ)
+KIND_FLOPPY :: 0
+KIND_HARD_DISK :: 1
+KIND_TAPE :: 2
+
+Dialog_Kind :: enum {
 	Floppy,
 	Hard_Disk,
-	Tape,
+	Tape_Play,
+	Tape_Rec,
+	Blank_2D,
+	Blank_2DD,
+	Blank_HD,
 }
 
 Gui_Entry :: struct {
 	name:   cstring,
 	is_dir: bool,
+}
+
+// フロッピーを開いた直後に、2つ目のイメージを次のドライブへ入れるかを調べるための保留
+Pending_Bank :: struct {
+	frames: int,
+	drive:  int,
+	path:   string,
 }
 
 Gui :: struct {
@@ -31,14 +49,20 @@ Gui :: struct {
 	menu_open:     bool, // いずれかのメニューが開いている
 	// ファイル選択
 	dialog_open:   bool,
-	purpose:       File_Purpose,
+	kind:          Dialog_Kind,
 	drive:         int,
+	show_all:      bool,
 	cwd:           string,
 	entries:       [dynamic]Gui_Entry,
 	path_buf:      [1024]u8,
-	last_dir:      string,
-	// バージョン情報
+	name_buf:      [256]u8,
+	pending:       Pending_Bank,
+	// ダイアログ
 	about_open:    bool,
+	volume_open:   bool,
+	volume_saved:  [2][16]int, // 開いた時点の値(キャンセル用)
+	// ステータスバー
+	fps:           f64,
 }
 
 gui: Gui
@@ -75,11 +99,6 @@ gui_init :: proc() {
 	if !gui.ja {
 		bubiz_gui_load_font("", 14) // 内蔵フォントにする
 	}
-	start := fe.opt.disk_dir
-	if start == "" {
-		start = os.get_env("HOME", context.allocator)
-	}
-	gui.last_dir = strings.clone(start if start != "" else ".")
 }
 
 gui_shutdown :: proc() {
@@ -94,17 +113,12 @@ gui_event :: proc(e: ^sapp.Event) -> bool {
 	return simgui.handle_event(e^)
 }
 
-// GUIがキーボード・マウスを使っているか(エミュレーション側へ渡さない)
-gui_wants_input :: proc() -> bool {
-	return gui.menu_open || gui.dialog_open || gui.about_open
-}
-
 // メニューバーを表示するか(フルスクリーンでは、マウスを上端へ寄せたときだけ)
 gui_menu_visible :: proc() -> bool {
 	return !sapp.is_fullscreen() || gui.mouse_y < f32(MENU_HEIGHT_LOGICAL) || gui.menu_open
 }
 
-// エミュレーション画面が使える領域の上端(フレームバッファのピクセル)。ウィンドウ表示ではメニューの下
+// エミュレーション画面が使える領域の上端と下端の余白(フレームバッファのピクセル)
 gui_top_offset :: proc() -> f32 {
 	if sapp.is_fullscreen() {
 		return 0
@@ -112,22 +126,29 @@ gui_top_offset :: proc() -> f32 {
 	return f32(MENU_HEIGHT_LOGICAL) * sapp.dpi_scale()
 }
 
-tr :: proc(ja, en: cstring) -> cstring {
-	return ja if gui.ja else en
+gui_bottom_offset :: proc() -> f32 {
+	if sapp.is_fullscreen() || get_option("show_status_bar") == 0 {
+		return 0
+	}
+	return f32(STATUS_HEIGHT_LOGICAL) * sapp.dpi_scale()
 }
 
-// 書式文字列用
-trf :: proc(ja, en: string) -> string {
+tr :: proc(ja, en: cstring) -> cstring {
 	return ja if gui.ja else en
 }
 
 gui_new_frame :: proc() {
 	simgui.new_frame({width = sapp.width(), height = sapp.height(), delta_time = sapp.frame_duration(), dpi_scale = sapp.dpi_scale()})
 	gui.menu_open = false
+	check_pending_bank()
 	if gui_menu_visible() {
 		draw_menu_bar()
 	}
+	if get_option("show_status_bar") != 0 && !sapp.is_fullscreen() {
+		draw_status_bar()
+	}
 	draw_file_dialog()
+	draw_volume_dialog()
 	draw_about()
 }
 
@@ -135,9 +156,13 @@ gui_render :: proc() {
 	simgui.render()
 }
 
+// ---------------------------------------------------------------------------
+// メニューの部品
+// ---------------------------------------------------------------------------
+
 @(private = "file")
-menu :: proc(label: cstring) -> bool {
-	open := igBeginMenuEx(label, true)
+menu :: proc(label: cstring, enabled := true) -> bool {
+	open := igBeginMenuEx(label, enabled)
 	if open {
 		gui.menu_open = true
 	}
@@ -150,149 +175,609 @@ item :: proc(label: cstring, shortcut: cstring = nil, selected := false, enabled
 }
 
 @(private = "file")
+opt_get :: proc(key: cstring) -> int {
+	return int(get_option(key))
+}
+
+@(private = "file")
+opt_set :: proc(key: cstring, value: int) {
+	set_option(key, i32(value))
+}
+
+// 選択肢の1つ(ラジオ)
+@(private = "file")
+radio :: proc(label: cstring, key: cstring, value: int, enabled := true) {
+	if item(label, nil, opt_get(key) == value, enabled) {
+		opt_set(key, value)
+	}
+}
+
+// オン/オフ
+@(private = "file")
+check :: proc(label: cstring, key: cstring, enabled := true) {
+	on := opt_get(key) != 0
+	if item(label, nil, on, enabled) {
+		opt_set(key, 0 if on else 1)
+	}
+}
+
+// option_switch の1ビット
+@(private = "file")
+switch_bit :: proc(label: cstring, bit: uint) {
+	v := opt_get("option_switch")
+	on := (v & (1 << bit)) != 0
+	if item(label, nil, on) {
+		opt_set("option_switch", v ~ (1 << bit))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// メニューバー
+// ---------------------------------------------------------------------------
+
+@(private = "file")
 draw_menu_bar :: proc() {
 	if !igBeginMainMenuBar() {
 		return
 	}
 	defer igEndMainMenuBar()
 
-	if menu(tr("ファイル", "File")) {
-		defer igEndMenu()
-		for d in 0 ..< FLOPPY_DRIVES {
-			if menu(fmt.ctprintf(trf("フロッピー%d", "Floppy %d"), d + 1)) {
-				if item(tr("開く...", "Open...")) {
-					open_file_dialog(.Floppy, d)
-				}
-				if item(tr("取り出し", "Eject"), nil, false, floppy_inserted(i32(d))) {
-					close_floppy(i32(d))
-				}
-				igEndMenu()
+	draw_control_menu()
+	for d in 0 ..< FLOPPY_DRIVES {
+		draw_floppy_menu(d)
+	}
+	draw_tape_menu()
+	for d in 0 ..< 2 {
+		draw_hard_disk_menu(d)
+	}
+	draw_device_menu()
+	draw_host_menu()
+}
+
+@(private = "file")
+draw_control_menu :: proc() {
+	if !menu("Control") {
+		return
+	}
+	defer igEndMenu()
+	if item("IPL Reset", "F12") {
+		reset()
+	}
+	if item("Reset", "Ctrl+F12") {
+		special_reset()
+	}
+	igSeparator()
+	for p in 0 ..< 5 {
+		radio(fmt.ctprintf("CPU x%d", 1 << uint(p)), "cpu_power", p)
+	}
+	if item("Full Speed", nil, opt_get("full_speed") != 0) {
+		opt_set("full_speed", 1 - opt_get("full_speed"))
+	}
+	check("Drive VM in M1/R/W Cycle", "drive_vm_in_opecode")
+	igSeparator()
+	if item("Paste") {
+		action_paste()
+	}
+	if item("Stop") {
+		stop_auto_key()
+	}
+	if item("Romaji to Kana", nil, opt_get("romaji_to_kana") != 0) {
+		set_romaji_to_kana(opt_get("romaji_to_kana") == 0)
+	}
+	igSeparator()
+	if menu("Save State") {
+		for s in 0 ..< 10 {
+			if item(fmt.ctprintf("State %d", s)) {
+				save_state_slot(i32(s))
 			}
 		}
-		if menu(tr("ハードディスク", "Hard disk")) {
-			if item(tr("開く...", "Open...")) {
-				open_file_dialog(.Hard_Disk, 0)
+		igEndMenu()
+	}
+	if menu("Load State") {
+		for s in 0 ..< 10 {
+			if item(fmt.ctprintf("State %d", s)) {
+				load_state_slot(i32(s))
 			}
-			if item(tr("取り外し", "Remove")) {
-				close_hard_disk(0)
-			}
-			igEndMenu()
 		}
-		if menu(tr("テープ", "Tape")) {
-			if item(tr("再生...", "Play...")) {
-				open_file_dialog(.Tape, 0)
-			}
-			if item(tr("取り出し", "Eject")) {
-				close_tape(0)
-			}
-			igEndMenu()
-		}
+		igEndMenu()
+	}
+	igSeparator()
+	if item("Debug Main CPU", "Ctrl+D") {
+		open_debugger(0)
+	}
+	if item("Close Debugger") {
+		close_debugger()
+	}
+	igSeparator()
+	if item("Exit") {
+		sapp.request_quit()
+	}
+}
+
+@(private = "file")
+draw_floppy_menu :: proc(d: int) {
+	if !menu(fmt.ctprintf("FD%d", d + 1)) {
+		return
+	}
+	defer igEndMenu()
+	inserted := floppy_inserted(i32(d))
+	if item("Insert") {
+		open_dialog(.Floppy, d)
+	}
+	if item("Eject") {
+		close_floppy(i32(d))
+	}
+	if item("Insert Blank 2D Disk") {
+		open_dialog(.Blank_2D, d)
+	}
+	if item("Insert Blank 2DD Disk") {
+		open_dialog(.Blank_2DD, d)
+	}
+	igSeparator()
+	protected := floppy_protected(i32(d))
+	if item("Write Protected", nil, protected, inserted) {
+		set_floppy_protected(i32(d), !protected)
+	}
+	check(fmt.ctprintf("Correct Timing##%d", d), fmt.ctprintf("correct_disk_timing:%d", d))
+	check(fmt.ctprintf("Ignore CRC Errors##%d", d), fmt.ctprintf("ignore_disk_crc:%d", d))
+	// 複数のイメージを含むD88は、バンクを選べる
+	banks := int(floppy_bank_count(i32(d)))
+	if banks > 1 {
 		igSeparator()
-		if menu(tr("ステートを保存", "Save state")) {
-			for s in 1 ..= 4 {
-				if item(fmt.ctprintf(trf("スロット%d", "Slot %d"), s), fmt.ctprintf("Ctrl+F%d", s)) {
-					save_state_slot(i32(s))
-				}
+		cur := int(floppy_cur_bank(i32(d)))
+		for b in 0 ..< banks {
+			name := floppy_bank_name(i32(d), i32(b))
+			if item(fmt.ctprintf("%d: %s##bank%d", b + 1, name, b), nil, b == cur) {
+				select_floppy_bank(i32(d), i32(b))
 			}
-			igEndMenu()
-		}
-		if menu(tr("ステートを読み込み", "Load state")) {
-			for s in 1 ..= 4 {
-				if item(fmt.ctprintf(trf("スロット%d", "Slot %d"), s), fmt.ctprintf("Ctrl+Shift+F%d", s)) {
-					load_state_slot(i32(s))
-				}
-			}
-			igEndMenu()
-		}
-		igSeparator()
-		if item(tr("スクリーンショット", "Screenshot"), "Ctrl+S") {
-			action_screenshot()
-		}
-		igSeparator()
-		if item(tr("終了", "Quit")) {
-			sapp.request_quit()
 		}
 	}
+	draw_recent(KIND_FLOPPY, d)
+}
 
-	if menu(tr("制御", "Control")) {
-		defer igEndMenu()
-		if item(tr("リセット", "Reset"), "F12") {
-			reset()
-		}
-		if item(tr("スペシャルリセット", "Special reset"), "Ctrl+F12") {
-			special_reset()
-		}
-		igSeparator()
-		if item(tr("一時停止", "Pause"), "Ctrl+P", sync.atomic_load(&fe.paused)) {
-			action_toggle_pause()
-		}
-		if menu(tr("速度", "Speed")) {
-			for pct in ([]int{25, 50, 100, 200, 400}) {
-				if item(fmt.ctprintf("%d%%", pct), nil, fe.opt.wait && fe.opt.speed == pct) {
-					fe.opt.wait = true
-					fe.opt.speed = pct
-				}
-			}
-			if item(tr("全速", "Full speed"), nil, !fe.opt.wait) {
-				fe.opt.wait = false
-			}
-			igEndMenu()
+@(private = "file")
+draw_tape_menu :: proc() {
+	if !menu("CMT") {
+		return
+	}
+	defer igEndMenu()
+	if item("Play") {
+		open_dialog(.Tape_Play, 0)
+	}
+	if item("Rec") {
+		open_dialog(.Tape_Rec, 0)
+	}
+	if item("Eject") {
+		close_tape(0)
+	}
+	igSeparator()
+	has := tape_inserted(0)
+	if item("Play Button", nil, tape_playing(0), has) {
+		tape_button(0, 0)
+	}
+	if item("Stop Button", nil, false, has) {
+		tape_button(0, 1)
+	}
+	if item("Fast Forward", nil, false, has) {
+		tape_button(0, 2)
+	}
+	if item("Fast Rewind", nil, false, has) {
+		tape_button(0, 3)
+	}
+	igSeparator()
+	check("Waveform Shaper", "wave_shaper:0")
+	draw_recent(KIND_TAPE, 0)
+}
+
+@(private = "file")
+draw_hard_disk_menu :: proc(d: int) {
+	if !menu(fmt.ctprintf("HD%d", d + 1)) {
+		return
+	}
+	defer igEndMenu()
+	if item("Mount") {
+		open_dialog(.Hard_Disk, d)
+	}
+	if item("Unmount") {
+		close_hard_disk(i32(d))
+	}
+	if item("Mount Blank 20MB Disk") {
+		open_dialog(.Blank_HD, d)
+	}
+	draw_recent(KIND_HARD_DISK, d)
+}
+
+// 履歴(最大8件)。選ぶとそのファイルを開き、先頭へ移す
+@(private = "file")
+draw_recent :: proc(kind, drive: int) {
+	any_recent := false
+	for i in 0 ..< 8 {
+		if string(recent_path(i32(kind), i32(drive), i32(i))) != "" {
+			any_recent = true
+			break
 		}
 	}
+	if !any_recent {
+		return
+	}
+	igSeparator()
+	for i in 0 ..< 8 {
+		path := recent_path(i32(kind), i32(drive), i32(i))
+		if string(path) == "" {
+			continue
+		}
+		if item(fmt.ctprintf("%d  %s##recent%d", i + 1, path, i)) {
+			open_media(kind, drive, string(path), false)
+			break // 履歴の並びが変わるので、この回はここまで
+		}
+	}
+}
 
-	if menu(tr("画面", "Screen")) {
-		defer igEndMenu()
-		if item(tr("フルスクリーン", "Fullscreen"), "F11", sapp.is_fullscreen()) {
+@(private = "file")
+draw_device_menu :: proc() {
+	if !menu("Device") {
+		return
+	}
+	defer igEndMenu()
+	if menu("Boot") {
+		radio("MZ-2500", "boot_mode", 0)
+		radio("MZ-2000", "boot_mode", 1)
+		radio("MZ-80B", "boot_mode", 2)
+		igEndMenu()
+	}
+	if menu("Option") {
+		switch_bit("MZ-1E26 (Voice Comm.)", 8)
+		switch_bit("MZ-1E30 (SASI I/F)", 9)
+		switch_bit("MZ-1E32 (Parallel I/F)", 10)
+		switch_bit("MZ-1R12 (CMOS RAM)", 11)
+		switch_bit("MZ-1R13 (Kanji ROM)", 12)
+		switch_bit("MZ-1R37 (EMM)", 13)
+		switch_bit("WIZnet W3100A (NIC)", 14)
+		igEndMenu()
+	}
+	if menu("Sound") {
+		switch_bit("CMU-800", 0)
+		switch_bit("CMU-800 Tempo +10", 1)
+		switch_bit("CMU-800 Tempo -10", 2)
+		switch_bit("CMU-800 Tempo +5", 3)
+		switch_bit("CMU-800 Tempo -5", 4)
+		switch_bit("CMU-800 Tempo +1", 5)
+		switch_bit("CMU-800 Tempo -1", 6)
+		switch_bit("CMU-800 Tempo 160", 7)
+		igSeparator()
+		check("Play FDD Noise", "sound_noise_fdd")
+		check("Play CMT Noise", "sound_noise_cmt")
+		check("Play CMT Signal", "sound_tape_signal")
+		check("Play CMT Voice", "sound_tape_voice")
+		igEndMenu()
+	}
+	if menu("Display") {
+		radio("400 Lines, Analog", "monitor_type", 0)
+		radio("400 Lines, Digital", "monitor_type", 1)
+		radio("200 Lines, Analog", "monitor_type", 2)
+		radio("200 Lines, Digital", "monitor_type", 3)
+		igSeparator()
+		check("Scanline", "scan_line")
+		igEndMenu()
+	}
+	if menu("Printer") {
+		radio("Write Printer to File", "printer_type", 0)
+		radio("MZ-1P17", "printer_type", 1)
+		radio("PC-PR201", "printer_type", 2, false)
+		radio("None", "printer_type", 3)
+		igEndMenu()
+	}
+}
+
+@(private = "file")
+draw_host_menu :: proc() {
+	if !menu("Host") {
+		return
+	}
+	defer igEndMenu()
+	// 動画の録画は未実装
+	item("Rec Movie 60fps", nil, false, false)
+	item("Rec Movie 30fps", nil, false, false)
+	item("Rec Movie 15fps", nil, false, false)
+	if item("Rec Sound") {
+		start_record_sound()
+	}
+	if item("Stop") {
+		stop_record_sound()
+	}
+	if item("Capture Screen", "Ctrl+S") {
+		action_screenshot()
+	}
+	igSeparator()
+	if menu("Screen") {
+		if item("Window x1", nil, false) {
+			set_window_scale(1)
+		}
+		if item("Window x2", nil, false) {
+			set_window_scale(2)
+		}
+		if item("Window x3", nil, false) {
+			set_window_scale(3)
+		}
+		if item("Window x4", nil, false) {
+			set_window_scale(4)
+		}
+		if item("Fullscreen 640x400", "F11", sapp.is_fullscreen()) {
 			sapp.toggle_fullscreen()
 		}
-		if menu(tr("縦横比", "Aspect")) {
-			if item("640x400", nil, !fe.opt.aspect_480) {
-				fe.opt.aspect_480 = false
-			}
-			if item("640x480", nil, fe.opt.aspect_480) {
-				fe.opt.aspect_480 = true
-			}
-			igEndMenu()
+		igSeparator()
+		radio("Window Stretch 1", "window_stretch_type", 0)
+		radio("Window Stretch 2", "window_stretch_type", 1)
+		igSeparator()
+		radio("Fullscreen Stretch 1", "fullscreen_stretch_type", 0)
+		radio("Fullscreen Stretch 2", "fullscreen_stretch_type", 1)
+		radio("Fullscreen Stretch 3", "fullscreen_stretch_type", 2)
+		radio("Fullscreen Stretch 4", "fullscreen_stretch_type", 3)
+		igSeparator()
+		radio("Rotate 0deg", "rotate_type", 0)
+		radio("Rotate +90deg", "rotate_type", 1)
+		radio("Rotate 180deg", "rotate_type", 2)
+		radio("Rotate -90deg", "rotate_type", 3)
+		igEndMenu()
+	}
+	if menu("Filter") {
+		radio("RGB Filter", "filter_type", 1)
+		radio("None", "filter_type", 0)
+		igEndMenu()
+	}
+	if menu("Sound") {
+		for hz, i in SOUND_RATES {
+			radio(fmt.ctprintf("%dHz", hz), "sound_frequency", i)
 		}
-		if menu(tr("フィルタ", "Filter")) {
-			if item(tr("なし", "None"), nil, fe.filter == .None) {
-				fe.filter = .None
-				fe.last_seq = 0
-			}
-			if item("RGB", "Ctrl+F", fe.filter == .RGB) {
-				fe.filter = .RGB
-				fe.last_seq = 0
-			}
-			igEndMenu()
+		igSeparator()
+		for ms, i in ([]int{50, 100, 200, 300, 400}) {
+			radio(fmt.ctprintf("%dmsec", ms), "sound_latency", i)
 		}
-		if item(tr("スキャンライン", "Scanline"), nil, fe.opt.scan_line != 0) {
-			fe.opt.scan_line = 1 - fe.opt.scan_line
-			set_config("scan_line", i32(fe.opt.scan_line))
+		igSeparator()
+		if item("Realtime Mix", nil, opt_get("sound_strict_rendering") != 0) {
+			opt_set("sound_strict_rendering", 1)
+		}
+		if item("Light Weight Mix", nil, opt_get("sound_strict_rendering") == 0) {
+			opt_set("sound_strict_rendering", 0)
+		}
+		igSeparator()
+		if item("Volume") {
+			open_volume_dialog()
+		}
+		igEndMenu()
+	}
+	if menu("Input") {
+		// ホストのジョイスティックは未対応のため、キーボードで代用する
+		radio("Joystick #1 (Keyboard)", "keyboard_joystick", 1)
+		radio("Joystick #2 (Keyboard)", "keyboard_joystick", 2)
+		item("Joystick To Keyboard", nil, false, false)
+		igSeparator()
+		if item("Joystick Off", nil, opt_get("keyboard_joystick") == 0) {
+			opt_set("keyboard_joystick", 0)
+		}
+		igEndMenu()
+	}
+	igSeparator()
+	check("Wait Vsync", "wait_vsync")
+	check("Show Status Bar", "show_status_bar")
+	igSeparator()
+	if item("About BubiZ-2500") {
+		gui.about_open = true
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 貼り付け(自動キー入力)
+// ---------------------------------------------------------------------------
+
+// クリップボードの文字列を、ASCIIと半角カナのバイト列にして送る
+@(private = "file")
+action_paste :: proc() {
+	text := string(sapp.get_clipboard_string())
+	if text == "" {
+		return
+	}
+	buf: [dynamic]u8
+	defer delete(buf)
+	for r in text {
+		switch {
+		case r < 0x80:
+			append(&buf, u8(r))
+		case r >= 0xFF61 && r <= 0xFF9F: // 半角カナ → Shift_JISの0xA1〜0xDF
+			append(&buf, u8(r - 0xFF61 + 0xA1))
 		}
 	}
+	if len(buf) > 0 {
+		paste_text(raw_data(buf), i32(len(buf)))
+	}
+}
 
-	if menu(tr("デバイス", "Device")) {
-		defer igEndMenu()
-		if item(tr("キーボードをジョイスティックにする", "Keyboard as joystick"), "Ctrl+J", fe.joy_mode) {
-			action_toggle_joystick()
+// ---------------------------------------------------------------------------
+// ステータスバー
+// ---------------------------------------------------------------------------
+
+@(private = "file")
+base_name :: proc(path: string) -> string {
+	i := max(strings.last_index_byte(path, '/'), strings.last_index_byte(path, '\\'))
+	return path[i + 1:]
+}
+
+@(private = "file")
+draw_status_bar :: proc() {
+	vw, vh := f32(sapp.width()) / sapp.dpi_scale(), f32(sapp.height()) / sapp.dpi_scale()
+	igSetNextWindowPos({0, vh - STATUS_HEIGHT_LOGICAL}, 0)
+	igSetNextWindowSize({vw, STATUS_HEIGHT_LOGICAL}, 0)
+	flags := WINDOW_NO_TITLE_BAR | WINDOW_NO_RESIZE | WINDOW_NO_MOVE | WINDOW_NO_SCROLLBAR | WINDOW_NO_SAVED_SETTINGS | WINDOW_NO_BRING_TO_FRONT | WINDOW_NO_NAV
+	if igBegin("##statusbar", nil, flags) {
+		fd_access := floppy_accessed()
+		for d in 0 ..< FLOPPY_DRIVES {
+			label := "(empty)"
+			if p := string(floppy_path(i32(d))); p != "" {
+				label = base_name(p)
+			}
+			mark := "*" if (fd_access & (1 << uint(d))) != 0 else " "
+			igTextUnformatted(fmt.ctprintf("FD%d%s%s", d + 1, mark, label))
+			igSameLine()
 		}
-		if item(tr("マウスをキャプチャ", "Capture mouse"), "Ctrl+M", fe.mouse_grab) {
-			set_mouse_grab(!fe.mouse_grab)
+		hd_access := hard_disk_accessed()
+		for d in 0 ..< 2 {
+			mark := "*" if (hd_access & (1 << uint(d))) != 0 else " "
+			state := "(mounted)" if hard_disk_inserted(i32(d)) else "(none)"
+			igTextUnformatted(fmt.ctprintf("HD%d%s%s", d + 1, mark, state))
+			igSameLine()
+		}
+		cmt := "CMT:(empty)"
+		if tape_playing(0) {
+			cmt = "CMT:PLAY"
+		} else if tape_recording(0) {
+			cmt = "CMT:REC"
+		} else if tape_inserted(0) {
+			cmt = "CMT:STOP"
+		}
+		igTextUnformatted(fmt.ctprintf("%s %s  %.0ffps", cmt, tape_message(0), gui.fps))
+	}
+	igEnd()
+}
+
+// ---------------------------------------------------------------------------
+// ウィンドウサイズ
+// ---------------------------------------------------------------------------
+
+// エミュレーション画面が等倍の何倍になるようにウィンドウを変えるか
+@(private = "file")
+set_window_scale :: proc(n: int) {
+	if sapp.is_fullscreen() {
+		return
+	}
+	set_option("window_mode", i32(n - 1))
+	w, h := window_size_for_scale(n)
+	native_resize_window(w, h)
+}
+
+// 倍率nのときのウィンドウの内側の大きさ(論理座標)
+window_size_for_scale :: proc(n: int) -> (w, h: i32) {
+	base_h := 480 if opt_get("window_stretch_type") == 1 else 400
+	sw, sh := 640, base_h
+	if opt_get("rotate_type") == 1 || opt_get("rotate_type") == 3 {
+		sw, sh = sh, sw
+	}
+	status := 0
+	if get_option("show_status_bar") != 0 {
+		status = STATUS_HEIGHT_LOGICAL
+	}
+	return i32(sw * n), i32(sh * n + MENU_HEIGHT_LOGICAL + status)
+}
+
+// ---------------------------------------------------------------------------
+// メディアを開く
+// ---------------------------------------------------------------------------
+
+// 履歴に加えて開く。fromRecent=trueのときは、履歴の並び替えだけ(開くのは同じ)
+@(private = "file")
+open_media :: proc(kind, drive: int, path: string, new_media: bool) {
+	cpath := strings.clone_to_cstring(path, context.temp_allocator)
+	add_recent(i32(kind), i32(drive), cpath)
+	switch kind {
+	case KIND_FLOPPY:
+		open_floppy(i32(drive), cpath, 0)
+		// 複数のイメージを含むD88は、偶数ドライブなら次のドライブへ2つ目を入れる(元の実装と同じ)
+		if drive % 2 == 0 && drive + 1 < FLOPPY_DRIVES {
+			delete(gui.pending.path)
+			gui.pending = Pending_Bank{frames = 3, drive = drive, path = strings.clone(path)}
+		}
+	case KIND_HARD_DISK:
+		open_hard_disk(i32(drive), cpath)
+	case KIND_TAPE:
+		play_tape(0, cpath)
+	}
+	remember_dir(kind, path)
+}
+
+@(private = "file")
+remember_dir :: proc(kind: int, path: string) {
+	sep := max(strings.last_index_byte(path, '/'), strings.last_index_byte(path, '\\'))
+	if sep > 0 {
+		set_initial_dir(i32(kind), strings.clone_to_cstring(path[:sep], context.temp_allocator))
+	}
+}
+
+// open_floppyは非同期のため、バンク数が分かるまで数フレーム待ってから次のドライブへ入れる
+@(private = "file")
+check_pending_bank :: proc() {
+	if gui.pending.frames <= 0 {
+		return
+	}
+	gui.pending.frames -= 1
+	if gui.pending.frames == 0 {
+		d := gui.pending.drive
+		if floppy_bank_count(i32(d)) > 1 {
+			open_floppy(i32(d + 1), strings.clone_to_cstring(gui.pending.path, context.temp_allocator), 1)
+		}
+		delete(gui.pending.path)
+		gui.pending.path = ""
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ボリューム
+// ---------------------------------------------------------------------------
+
+@(private = "file")
+open_volume_dialog :: proc() {
+	n := min(int(sound_device_count()), 16)
+	for i in 0 ..< n {
+		gui.volume_saved[0][i] = opt_get(fmt.ctprintf("sound_volume_l:%d", i))
+		gui.volume_saved[1][i] = opt_get(fmt.ctprintf("sound_volume_r:%d", i))
+	}
+	gui.volume_open = true
+}
+
+@(private = "file")
+draw_volume_dialog :: proc() {
+	if !gui.volume_open {
+		return
+	}
+	igSetNextWindowPos({20, MENU_HEIGHT_LOGICAL + 8}, COND_APPEARING)
+	igSetNextWindowSize({420, 0}, COND_APPEARING)
+	open := true
+	if igBegin("Volume##volume", &open, WINDOW_NO_COLLAPSE | WINDOW_NO_SAVED_SETTINGS | WINDOW_ALWAYS_AUTO_RESIZE) {
+		n := min(int(sound_device_count()), 16)
+		igSeparatorText("Left / Right (dB)")
+		for i in 0 ..< n {
+			for ch in 0 ..< 2 {
+				key := fmt.ctprintf("sound_volume_%s:%d", "l" if ch == 0 else "r", i)
+				v := c_int(opt_get(key))
+				igSetNextItemWidth(150)
+				if igSliderInt(fmt.ctprintf("##v%d_%d", i, ch), &v, -40, 0) {
+					opt_set(key, int(v))
+				}
+				igSameLine()
+			}
+			igTextUnformatted(sound_device_name(i32(i)))
+		}
+		igSeparator()
+		if igButton("OK") {
+			gui.volume_open = false
+		}
+		igSameLine()
+		if igButton("Cancel") {
+			for i in 0 ..< n {
+				opt_set(fmt.ctprintf("sound_volume_l:%d", i), gui.volume_saved[0][i])
+				opt_set(fmt.ctprintf("sound_volume_r:%d", i), gui.volume_saved[1][i])
+			}
+			gui.volume_open = false
+		}
+		igSameLine()
+		if igButton("Reset") {
+			for i in 0 ..< n {
+				opt_set(fmt.ctprintf("sound_volume_l:%d", i), 0)
+				opt_set(fmt.ctprintf("sound_volume_r:%d", i), 0)
+			}
 		}
 	}
-
-	if menu(tr("デバッグ", "Debug")) {
-		defer igEndMenu()
-		if item(tr("デバッガーを開く(端末)", "Open debugger (terminal)"), "Ctrl+D", debugger_active()) {
-			open_debugger(0)
-		}
-	}
-
-	if menu(tr("ヘルプ", "Help")) {
-		defer igEndMenu()
-		if item(tr("バージョン情報", "About")) {
-			gui.about_open = true
-		}
+	igEnd()
+	if !open {
+		gui.volume_open = false
 	}
 }
 
@@ -305,9 +790,9 @@ draw_about :: proc() {
 	if igBeginPopupModal("About##bubiz", nil, WINDOW_ALWAYS_AUTO_RESIZE | WINDOW_NO_RESIZE) {
 		gui.menu_open = true
 		igTextUnformatted(fmt.ctprintf("BubiZ-2500 %s", VERSION))
-		igTextUnformatted(tr("SHARP MZ-2500 エミュレーター", "SHARP MZ-2500 emulator"))
+		igTextUnformatted("SHARP MZ-2500 emulator")
 		igSeparator()
-		igTextUnformatted(tr("エミュレーションコア: Common Source Code Project (EmuZ-2500)", "Core: Common Source Code Project (EmuZ-2500)"))
+		igTextUnformatted("Core: Common Source Code Project (EmuZ-2500)")
 		igTextUnformatted("Odin / Sokol / Dear ImGui")
 		igSeparator()
 		if igButton("OK") {
@@ -318,32 +803,75 @@ draw_about :: proc() {
 }
 
 // ---------------------------------------------------------------------------
-// ファイル選択
+// ファイル選択(開く / 保存)
 // ---------------------------------------------------------------------------
 
 @(private = "file")
-open_file_dialog :: proc(purpose: File_Purpose, drive: int) {
-	gui.purpose = purpose
-	gui.drive = drive
-	gui.dialog_open = true
-	set_dir(gui.last_dir)
+c_int :: i32
+
+@(private = "file")
+is_save_dialog :: proc(k: Dialog_Kind) -> bool {
+	return k == .Tape_Rec || k == .Blank_2D || k == .Blank_2DD || k == .Blank_HD
 }
 
 @(private = "file")
-FLOPPY_EXTS := []string{".d88", ".d77", ".2d", ".2hd", ".dsk", ".img", ".fdi", ".xdf"}
+dialog_kind_index :: proc(k: Dialog_Kind) -> int {
+	switch k {
+	case .Floppy, .Blank_2D, .Blank_2DD: return KIND_FLOPPY
+	case .Hard_Disk, .Blank_HD: return KIND_HARD_DISK
+	case .Tape_Play, .Tape_Rec: return KIND_TAPE
+	}
+	return KIND_FLOPPY
+}
+
+@(private = "file")
+FLOPPY_EXTS := []string{".d88", ".d8e", ".d77", ".1dd", ".td0", ".imd", ".dsk", ".nfd", ".fdi", ".hdm", ".hd5", ".hd4", ".hdb", ".dd9", ".dd6", ".tfd", ".xdf", ".2d", ".sf7", ".img", ".ima", ".vfd"}
+@(private = "file")
+BLANK_FLOPPY_EXTS := []string{".d88", ".d77"}
 @(private = "file")
 HDD_EXTS := []string{".hdd", ".hdi", ".nhd", ".thd", ".dat"}
 @(private = "file")
-TAPE_EXTS := []string{".wav", ".mzt", ".m12", ".mti", ".cas", ".cmt", ".t88"}
+TAPE_PLAY_EXTS := []string{".wav", ".cas", ".mzt", ".mzf", ".m12", ".gz"}
+@(private = "file")
+TAPE_REC_EXTS := []string{".wav", ".cas"}
 
 @(private = "file")
-dialog_extensions :: proc(p: File_Purpose) -> []string {
-	switch p {
+dialog_extensions :: proc(k: Dialog_Kind) -> []string {
+	switch k {
 	case .Floppy: return FLOPPY_EXTS
-	case .Hard_Disk: return HDD_EXTS
-	case .Tape: return TAPE_EXTS
+	case .Blank_2D, .Blank_2DD: return BLANK_FLOPPY_EXTS
+	case .Hard_Disk, .Blank_HD: return HDD_EXTS
+	case .Tape_Play: return TAPE_PLAY_EXTS
+	case .Tape_Rec: return TAPE_REC_EXTS
 	}
 	return nil
+}
+
+@(private = "file")
+open_dialog :: proc(kind: Dialog_Kind, drive: int) {
+	gui.kind = kind
+	gui.drive = drive
+	gui.dialog_open = true
+	start := string(initial_dir(i32(dialog_kind_index(kind))))
+	if start == "" || !os.is_dir(start) {
+		start = os.get_env("HOME", context.temp_allocator)
+		when ODIN_OS == .Windows {
+			if start == "" {start = os.get_env("USERPROFILE", context.temp_allocator)}
+		}
+	}
+	set_dir(start if start != "" else ".")
+	// 保存の既定のファイル名(日時)
+	if is_save_dialog(kind) {
+		ext := ".d88"
+		#partial switch kind {
+		case .Blank_HD: ext = ".hdi"
+		case .Tape_Rec: ext = ".wav"
+		}
+		stamp := fmt.tprintf("%s%s", date_stamp(), ext)
+		n := min(len(stamp), len(gui.name_buf) - 1)
+		copy(gui.name_buf[:n], stamp[:n])
+		gui.name_buf[n] = 0
+	}
 }
 
 @(private = "file")
@@ -379,7 +907,7 @@ set_dir :: proc(dir: string) {
 	}
 	defer os.file_info_slice_delete(infos, context.allocator)
 
-	exts := dialog_extensions(gui.purpose)
+	exts := dialog_extensions(gui.kind)
 	dirs: [dynamic]string
 	files: [dynamic]string
 	defer delete(dirs)
@@ -390,6 +918,8 @@ set_dir :: proc(dir: string) {
 		}
 		if fi.type == .Directory {
 			append(&dirs, fi.name)
+		} else if gui.show_all {
+			append(&files, fi.name)
 		} else {
 			lower := strings.to_lower(fi.name, context.temp_allocator)
 			for ext in exts {
@@ -451,17 +981,59 @@ join_path :: proc(dir, name: string) -> string {
 	return fmt.tprintf("%s%s%s", dir, sep, name)
 }
 
+// 選んだファイルに対する処理
 @(private = "file")
 choose_file :: proc(path: string) {
 	cpath := strings.clone_to_cstring(path, context.temp_allocator)
-	switch gui.purpose {
-	case .Floppy: open_floppy(i32(gui.drive), cpath, 0)
-	case .Hard_Disk: open_hard_disk(0, cpath)
-	case .Tape: play_tape(0, cpath)
+	switch gui.kind {
+	case .Floppy:
+		open_media(KIND_FLOPPY, gui.drive, path, false)
+	case .Hard_Disk:
+		open_media(KIND_HARD_DISK, gui.drive, path, false)
+	case .Tape_Play:
+		open_media(KIND_TAPE, 0, path, false)
+	case .Tape_Rec:
+		add_recent(KIND_TAPE, 0, cpath)
+		rec_tape(0, cpath)
+		remember_dir(KIND_TAPE, path)
+	case .Blank_2D, .Blank_2DD:
+		if create_blank_floppy(cpath, 0 if gui.kind == .Blank_2D else 1) {
+			open_media(KIND_FLOPPY, gui.drive, path, true)
+		}
+	case .Blank_HD:
+		if create_blank_hard_disk(cpath) {
+			open_media(KIND_HARD_DISK, gui.drive, path, true)
+		}
 	}
-	delete(gui.last_dir)
-	gui.last_dir = strings.clone(gui.cwd if gui.cwd != "" else ".")
 	gui.dialog_open = false
+}
+
+// 拡張子が無ければ足す
+@(private = "file")
+with_default_ext :: proc(name: string) -> string {
+	if strings.contains_rune(name, '.') {
+		return name
+	}
+	ext := ".d88"
+	#partial switch gui.kind {
+	case .Blank_HD: ext = ".hdi"
+	case .Tape_Rec: ext = ".wav"
+	}
+	return fmt.tprintf("%s%s", name, ext)
+}
+
+@(private = "file")
+dialog_title :: proc() -> cstring {
+	switch gui.kind {
+	case .Floppy: return fmt.ctprintf("Floppy Disk: FD%d##filedialog", gui.drive + 1)
+	case .Hard_Disk: return fmt.ctprintf("Hard Disk: HD%d##filedialog", gui.drive + 1)
+	case .Tape_Play: return "Play Tape##filedialog"
+	case .Tape_Rec: return "Record Tape##filedialog"
+	case .Blank_2D: return fmt.ctprintf("New Blank 2D Disk: FD%d##filedialog", gui.drive + 1)
+	case .Blank_2DD: return fmt.ctprintf("New Blank 2DD Disk: FD%d##filedialog", gui.drive + 1)
+	case .Blank_HD: return fmt.ctprintf("New Blank 20MB Disk: HD%d##filedialog", gui.drive + 1)
+	}
+	return "File##filedialog"
 }
 
 @(private = "file")
@@ -473,15 +1045,10 @@ draw_file_dialog :: proc() {
 	w, h := min(vw - 20, 560), min(vh - 40, 420)
 	igSetNextWindowPos({(vw - w) * 0.5, MENU_HEIGHT_LOGICAL + 8}, COND_APPEARING)
 	igSetNextWindowSize({w, h}, COND_APPEARING)
-	title: cstring
-	switch gui.purpose {
-	case .Floppy: title = fmt.ctprintf("%s %d##filedialog", tr("フロッピーを開く: ドライブ", "Open floppy: drive"), gui.drive + 1)
-	case .Hard_Disk: title = fmt.ctprintf("%s##filedialog", tr("ハードディスクを開く", "Open hard disk"))
-	case .Tape: title = fmt.ctprintf("%s##filedialog", tr("テープを再生", "Play tape"))
-	}
 	open := true
-	if igBegin(title, &open, WINDOW_NO_COLLAPSE | WINDOW_NO_SAVED_SETTINGS) {
-		if igButton(tr("上へ", "Up")) {
+	save := is_save_dialog(gui.kind)
+	if igBegin(dialog_title(), &open, WINDOW_NO_COLLAPSE | WINDOW_NO_SAVED_SETTINGS) {
+		if igButton("Up") {
 			set_dir(parent_dir(gui.cwd))
 		}
 		igSameLine()
@@ -490,28 +1057,50 @@ draw_file_dialog :: proc() {
 			typed := string(cstring(raw_data(gui.path_buf[:])))
 			if os.is_dir(typed) {
 				set_dir(typed)
-			} else if os.exists(typed) {
-				gui.cwd = strings.clone(parent_dir(typed))
+			} else if !save && os.exists(typed) {
 				choose_file(typed)
 			}
 		}
+		// 一覧に出す拡張子の絞り込み
+		all := gui.show_all
+		igTextUnformatted("Show all files:")
+		igSameLine()
+		if igButton("Off" if all else "On") {
+			gui.show_all = !gui.show_all
+			set_dir(gui.cwd)
+		}
 		igSeparator()
-		if igBeginChild("##list", {0, 0}, 0, 0) {
+		list_h := f32(-34) if save else f32(-4)
+		if igBeginChild("##list", {0, list_h}, 0, 0) {
 			for e, i in gui.entries {
 				label := fmt.ctprintf("%s%s##%d", "[D] " if e.is_dir else "    ", e.name, i)
 				if igSelectableEx(label, false, 0, {0, 0}) {
 					full := join_path(gui.cwd, string(e.name))
 					if e.is_dir {
 						set_dir(full)
-						break // entriesが入れ替わるので、この回の描画はここまで
+					} else if save {
+						n := min(len(e.name), len(gui.name_buf) - 1)
+						copy(gui.name_buf[:n], string(e.name)[:n])
+						gui.name_buf[n] = 0
 					} else {
 						choose_file(full)
-						break
 					}
+					break // entriesが入れ替わるので、この回の描画はここまで
 				}
 			}
 		}
 		igEndChild()
+		if save {
+			igSetNextItemWidth(igGetContentRegionAvail().x - 70)
+			igInputText("##name", raw_data(gui.name_buf[:]), len(gui.name_buf), 0)
+			igSameLine()
+			if igButton("Save") {
+				name := string(cstring(raw_data(gui.name_buf[:])))
+				if name != "" {
+					choose_file(join_path(gui.cwd, with_default_ext(name)))
+				}
+			}
+		}
 	}
 	igEnd()
 	if !open {

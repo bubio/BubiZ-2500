@@ -65,6 +65,35 @@ foreign core {
 	play_tape :: proc(drive: c.int, path: cstring) ---
 	rec_tape :: proc(drive: c.int, path: cstring) ---
 	close_tape :: proc(drive: c.int) ---
+	create_blank_floppy :: proc(path: cstring, type: c.int) -> bool ---
+	create_blank_hard_disk :: proc(path: cstring) -> bool ---
+	floppy_protected :: proc(drive: c.int) -> bool ---
+	set_floppy_protected :: proc(drive: c.int, protect: bool) ---
+	floppy_bank_count :: proc(drive: c.int) -> c.int ---
+	floppy_bank_name :: proc(drive: c.int, bank: c.int) -> cstring ---
+	floppy_cur_bank :: proc(drive: c.int) -> c.int ---
+	select_floppy_bank :: proc(drive: c.int, bank: c.int) ---
+	hard_disk_inserted :: proc(drive: c.int) -> bool ---
+	floppy_path :: proc(drive: c.int) -> cstring ---
+	tape_message :: proc(drive: c.int) -> cstring ---
+	tape_inserted :: proc(drive: c.int) -> bool ---
+	tape_playing :: proc(drive: c.int) -> bool ---
+	tape_recording :: proc(drive: c.int) -> bool ---
+	tape_button :: proc(drive: c.int, button: c.int) ---
+	recent_path :: proc(kind: c.int, drive: c.int, index: c.int) -> cstring ---
+	add_recent :: proc(kind: c.int, drive: c.int, path: cstring) ---
+	initial_dir :: proc(kind: c.int) -> cstring ---
+	set_initial_dir :: proc(kind: c.int, dir: cstring) ---
+	paste_text :: proc(text: [^]u8, size: c.int) ---
+	stop_auto_key :: proc() ---
+	set_romaji_to_kana :: proc(enable: bool) ---
+	floppy_accessed :: proc() -> u32 ---
+	hard_disk_accessed :: proc() -> u32 ---
+	tape_accessed :: proc() -> u32 ---
+	set_option :: proc(key: cstring, value: c.int) -> bool ---
+	get_option :: proc(key: cstring) -> c.int ---
+	sound_device_count :: proc() -> c.int ---
+	sound_device_name :: proc(index: c.int) -> cstring ---
 
 	save_state :: proc(path: cstring) ---
 	load_state :: proc(path: cstring) ---

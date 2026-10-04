@@ -143,6 +143,12 @@ void initialize_config()
 		config.joy_to_key_buttons[1] = -('X');
 	#endif
 	
+	// defaults for the BubiZ-2500 host layer
+	#ifdef BUBIZ_HOST
+		config.show_status_bar = true;
+		config.wait_vsync = true;
+		config.window_stretch_type = 0;	// 640x400
+	#endif
 	// win32
 	#ifdef _WIN32
 		#ifndef ONE_BOARD_MICRO_COMPUTER
@@ -389,6 +395,11 @@ void load_config(const _TCHAR* config_path)
 		}
 	#endif
 	
+	#ifdef BUBIZ_HOST
+		config.show_status_bar = MyGetPrivateProfileBool(_T("Host"), _T("ShowStatusBar"), config.show_status_bar, config_path);
+		config.wait_vsync = MyGetPrivateProfileBool(_T("Host"), _T("WaitVSync"), config.wait_vsync, config_path);
+		config.keyboard_joystick = MyGetPrivateProfileInt(_T("Host"), _T("KeyboardJoystick"), config.keyboard_joystick, config_path);
+	#endif
 	// win32
 	#ifdef _WIN32
 		config.use_telnet = MyGetPrivateProfileBool(_T("Win32"), _T("UseTelnet"), config.use_telnet, config_path);
@@ -619,6 +630,11 @@ void save_config(const _TCHAR* config_path)
 		}
 	#endif
 	
+	#ifdef BUBIZ_HOST
+		MyWritePrivateProfileBool(_T("Host"), _T("ShowStatusBar"), config.show_status_bar, config_path);
+		MyWritePrivateProfileBool(_T("Host"), _T("WaitVSync"), config.wait_vsync, config_path);
+		MyWritePrivateProfileInt(_T("Host"), _T("KeyboardJoystick"), config.keyboard_joystick, config_path);
+	#endif
 	// win32
 	#ifdef _WIN32
 		MyWritePrivateProfileBool(_T("Win32"), _T("UseTelnet"), config.use_telnet, config_path);

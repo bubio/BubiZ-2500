@@ -78,6 +78,48 @@ void bubiz_play_tape(int drive, const char *path);
 void bubiz_rec_tape(int drive, const char *path);
 void bubiz_close_tape(int drive);
 
+// メディア(追加): ブランクディスク、書き込み禁止、D88のバンク
+bool bubiz_create_blank_floppy(const char *path, int type);	// type 0:2D 1:2DD
+bool bubiz_create_blank_hard_disk(const char *path);		// 20MB
+bool bubiz_floppy_protected(int drive);
+void bubiz_set_floppy_protected(int drive, bool protect);
+int bubiz_floppy_bank_count(int drive);
+const char *bubiz_floppy_bank_name(int drive, int bank);
+int bubiz_floppy_cur_bank(int drive);
+void bubiz_select_floppy_bank(int drive, int bank);
+bool bubiz_hard_disk_inserted(int drive);
+const char *bubiz_floppy_path(int drive);	// 入っているイメージのパス(無ければ空)
+const char *bubiz_tape_message(int drive);	// テープの状態表示(位置など)
+
+// テープ操作
+bool bubiz_tape_inserted(int drive);
+bool bubiz_tape_playing(int drive);
+bool bubiz_tape_recording(int drive);
+void bubiz_tape_button(int drive, int button);	// 0:再生 1:停止 2:早送り 3:早戻し
+
+// 履歴と初期ディレクトリ。kind 0:フロッピー 1:ハードディスク 2:テープ
+const char *bubiz_recent_path(int kind, int drive, int index);	// 空文字なら無し(最大8件)
+void bubiz_add_recent(int kind, int drive, const char *path);
+const char *bubiz_initial_dir(int kind);
+void bubiz_set_initial_dir(int kind, const char *dir);
+
+// 自動キー入力(貼り付け)。textはShift_JIS相当のバイト列(ASCIIと半角カナ)
+void bubiz_paste_text(const char *text, int size);
+void bubiz_stop_auto_key(void);
+void bubiz_set_romaji_to_kana(bool enable);
+
+// ドライブのアクセス状態(ビットはドライブ番号)
+uint32_t bubiz_floppy_accessed(void);
+uint32_t bubiz_hard_disk_accessed(void);
+uint32_t bubiz_tape_accessed(void);
+
+// 汎用の設定項目。キーは "名前" または "名前:添字"(例: correct_disk_timing:0)
+// 値を変えるとエミュレーションスレッドで update_config() が呼ばれる。不明なキーはfalse/-1
+bool bubiz_set_option(const char *key, int value);
+int bubiz_get_option(const char *key);
+int bubiz_sound_device_count(void);
+const char *bubiz_sound_device_name(int index);
+
 // ステート
 void bubiz_save_state(const char *path);
 void bubiz_load_state(const char *path);

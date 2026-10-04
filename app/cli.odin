@@ -82,6 +82,7 @@ Options :: struct {
 	fullscreen:    bool,
 	window_size:   Window_Size,
 	aspect_480:    bool, // true: 640x480(4:3)比率、false: 640x400比率
+	aspect_set:    bool, // -aspectが指定されたか(未指定なら設定ファイルの値)
 	width:         int,
 	height:        int,
 	wait:          bool, // false=ウェイト無し(全速)
@@ -90,9 +91,11 @@ Options :: struct {
 	sample_freq:   int,
 	mouse:         bool,
 	joystick:      bool,
+	joystick_set:  bool, // -joystick / -nojoystickが指定されたか
 	show_fps:      bool,
 	debug:         bool, // 起動時にデバッガーを開く
 	filter:        Screen_Filter, // 画面フィルタ
+	filter_set:    bool, // -filterが指定されたか
 	interp:        bool, // 拡大時に補間する(既定は最近傍)
 	resume:        bool,
 	resume_file:   string,
@@ -107,6 +110,7 @@ default_options :: proc() -> Options {
 		wait = true,
 		speed = 100,
 		sound = true,
+		save_config = true, // 元の実装と同じく、終了時に設定を保存する
 		window_size = .Full,
 	}
 }
@@ -334,8 +338,8 @@ parse_args :: proc(args: []string) -> (opt: Options, err: string) {
 			v, msg = take_int(args, &i, name)
 			if msg == "" {
 				switch v {
-				case 400: opt.aspect_480 = false
-				case 480: opt.aspect_480 = true
+				case 400: opt.aspect_480, opt.aspect_set = false, true
+				case 480: opt.aspect_480, opt.aspect_set = true, true
 				case: msg = "-aspect には 400 か 480 を指定してください"
 				}
 			}
@@ -367,17 +371,17 @@ parse_args :: proc(args: []string) -> (opt: Options, err: string) {
 		case "-nomouse":
 			opt.mouse = false
 		case "-joystick", "-use_joy":
-			opt.joystick = true
+			opt.joystick, opt.joystick_set = true, true
 		case "-nojoystick", "-nouse_joy":
-			opt.joystick = false
+			opt.joystick, opt.joystick_set = false, true
 		case "-debug", "-monitor_mode":
 			opt.debug = true
 		case "-filter":
 			v, ok := take_value(args, &i, name)
 			if !ok {return opt, "オプション -filter には値が必要です"}
 			switch strings.to_lower(v, context.temp_allocator) {
-			case "none": opt.filter = .None
-			case "rgb": opt.filter = .RGB
+			case "none": opt.filter, opt.filter_set = .None, true
+			case "rgb": opt.filter, opt.filter_set = .RGB, true
 			case: return opt, fmt.aprintf("オプション -filter の値は none か rgb です: %s", v)
 			}
 		case "-interp":

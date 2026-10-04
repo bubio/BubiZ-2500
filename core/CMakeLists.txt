@@ -69,6 +69,12 @@ if(EXISTS ${DCIMGUI}/cimgui.cpp)
     ${DCIMGUI}/cimgui.cpp ${DCIMGUI}/imgui.cpp ${DCIMGUI}/imgui_demo.cpp
     ${DCIMGUI}/imgui_draw.cpp ${DCIMGUI}/imgui_tables.cpp ${DCIMGUI}/imgui_widgets.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../gui/gui_shim.c)
+  if(APPLE)
+    target_sources(bubiz_imgui PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../gui/gui_native_mac.m)
+    set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/../gui/gui_native_mac.m PROPERTIES LANGUAGE C COMPILE_FLAGS "-x objective-c -fobjc-arc")
+  else()
+    target_sources(bubiz_imgui PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../gui/gui_native.c)
+  endif()
   target_include_directories(bubiz_imgui PUBLIC ${DCIMGUI})
   if(MSVC)
     target_compile_options(bubiz_imgui PRIVATE /w)

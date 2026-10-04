@@ -25,7 +25,12 @@ Im_Vec2 :: struct {
 }
 
 // ImGuiWindowFlags
+WINDOW_NO_TITLE_BAR :: c.int(1 << 0)
 WINDOW_NO_RESIZE :: c.int(1 << 1)
+WINDOW_NO_MOVE :: c.int(1 << 2)
+WINDOW_NO_SCROLLBAR :: c.int(1 << 3)
+WINDOW_NO_BRING_TO_FRONT :: c.int(1 << 13)
+WINDOW_NO_NAV :: c.int((1 << 16) | (1 << 17))
 WINDOW_NO_COLLAPSE :: c.int(1 << 5)
 WINDOW_ALWAYS_AUTO_RESIZE :: c.int(1 << 6)
 WINDOW_NO_SAVED_SETTINGS :: c.int(1 << 8)
@@ -51,6 +56,7 @@ foreign imgui_native {
 	igPushIDInt :: proc(id: c.int) ---
 	igPopID :: proc() ---
 	igTextUnformatted :: proc(text: cstring) ---
+	igSliderInt :: proc(label: cstring, v: ^c.int, v_min: c.int, v_max: c.int) -> bool ---
 	igSeparatorText :: proc(label: cstring) ---
 	igButton :: proc(label: cstring) -> bool ---
 	igInputText :: proc(label: cstring, buf: [^]u8, buf_size: c.size_t, flags: c.int) -> bool ---

@@ -225,6 +225,12 @@ typedef struct {
 		int general_param[USE_GENERAL_PARAM_TMP];
 	#endif
 	
+	// BubiZ-2500のホスト層(Win32版の同名項目の代わり)
+	#ifdef BUBIZ_HOST
+		bool show_status_bar;
+		bool wait_vsync;
+		int keyboard_joystick;	// キーボードをジョイスティックにする 0:しない 1:#1 2:#2
+	#endif
 	// debug
 	bool print_statistics;
 	bool special_debug_fdc;
