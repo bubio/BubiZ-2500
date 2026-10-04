@@ -105,7 +105,7 @@ init :: proc "c" () {
 		enable_mouse(true)
 	}
 	if fe.opt.debug {
-		open_debugger(0)
+		action_open_debugger()
 	}
 
 	sync.atomic_store(&fe.running, true)
@@ -461,7 +461,7 @@ handle_hotkey :: proc(e: ^sapp.Event) -> bool {
 		}
 	case .D:
 		if ctrl {
-			open_debugger(0)
+			action_open_debugger()
 			return true
 		}
 	case .J:

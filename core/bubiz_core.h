@@ -139,6 +139,11 @@ void bubiz_stop_record_sound(void);
 void bubiz_open_debugger(int cpu_index);
 void bubiz_close_debugger(void);
 bool bubiz_debugger_active(void);
+// 仮想コンソール: デバッガーの入出力を端末ではなくアプリのウィンドウで行う(端末が無い起動向け)
+void bubiz_set_virtual_console(bool on);
+int bubiz_console_read(unsigned short *attr, char *buf, int cap);	// 出力の続きを取り出す。属性が同じ文字列ごと。無ければ0
+void bubiz_console_write_input(const char *s, int n);	// デバッガーへ文字を送る('\r'で行の確定)
+void bubiz_console_break(void);	// 実行中のCPUを止める(ESC相当)
 
 // 電源オフ要求(ゲストが要求した場合)の有無
 bool bubiz_power_off_requested(void);

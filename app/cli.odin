@@ -493,7 +493,7 @@ usage :: proc() {
 	fmt.println("  -filter <none|rgb>        画面フィルタ(rgb: CRTのRGBサブピクセル表示。既定: none)")
 	fmt.println("  -interp | -nointerp       画面の拡大時に補間する / しない(既定: しない)")
 	fmt.println("  -show_fps | -hide_fps     ウィンドウタイトルにFPS(エミュレーション速度)を表示")
-	fmt.println("  -debug              起動時にデバッガーを開く(端末の標準入出力を使う。'?'でコマンド一覧)")
+	fmt.println("  -debug              起動時にデバッガーを開く(ウィンドウ内のデバッガー画面。-headlessでは端末を使う。'?'でコマンド一覧)")
 	fmt.println("  -resume             起動時にステートをロード")
 	fmt.println("  -resumefile <file>  起動時に指定ステートをロード")
 	fmt.println()

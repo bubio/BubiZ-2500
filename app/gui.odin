@@ -90,6 +90,8 @@ FONT_CANDIDATES :: [?]cstring {
 
 gui_init :: proc() {
 	simgui.setup({no_default_font = true, logger = {func = slog.func}})
+	// デバッガーは端末ではなくこのウィンドウの中で使う(端末の無い起動でも使えるように)
+	set_virtual_console(true)
 	bubiz_gui_disable_ini()
 	for path in FONT_CANDIDATES {
 		if os.exists(string(path)) && bubiz_gui_load_font(path, 14) {
@@ -149,6 +151,7 @@ gui_new_frame :: proc() {
 	if get_option("show_status_bar") != 0 && !sapp.is_fullscreen() {
 		draw_status_bar()
 	}
+	draw_debugger_window()
 	draw_file_dialog()
 	draw_volume_dialog()
 	draw_about()
@@ -285,10 +288,10 @@ draw_control_menu :: proc() {
 	}
 	igSeparator()
 	if item("Debug Main CPU", "Ctrl+D") {
-		open_debugger(0)
+		action_open_debugger()
 	}
 	if item("Close Debugger") {
-		close_debugger()
+		action_close_debugger()
 	}
 	igSeparator()
 	if item("Exit") {
@@ -610,7 +613,6 @@ COL_WINDOW_BG :: c_int(2)
 COL_BORDER :: c_int(5)
 
 // ABGRの色(ImU32)
-@(private = "file")
 rgb :: proc(r, g, b: u32) -> u32 {
 	return 0xFF000000 | (b << 16) | (g << 8) | r
 }

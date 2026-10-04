@@ -39,7 +39,7 @@ WINDOW_NO_SAVED_SETTINGS :: c.int(1 << 8)
 COND_APPEARING :: c.int(1 << 3)
 
 // ImGuiInputTextFlags
-INPUT_ENTER_RETURNS_TRUE :: c.int(1 << 5)
+INPUT_ENTER_RETURNS_TRUE :: c.int(1 << 6)
 
 @(default_calling_convention = "c")
 foreign imgui_native {
@@ -52,6 +52,13 @@ foreign imgui_native {
 	igSetNextItemWidth :: proc(w: f32) ---
 	igSeparator :: proc() ---
 	igSameLine :: proc() ---
+	igSameLineEx :: proc(offset_from_start_x: f32, spacing: f32) ---
+	igIsKeyPressedEx :: proc(key: c.int, repeat: bool) -> bool ---
+	igIsWindowFocused :: proc(flags: c.int) -> bool ---
+	igSetScrollHereY :: proc(center_y_ratio: f32) ---
+	igGetScrollY :: proc() -> f32 ---
+	igGetScrollMaxY :: proc() -> f32 ---
+	igSetKeyboardFocusHereEx :: proc(offset: c.int) ---
 	igPushID :: proc(id: cstring) ---
 	igPushIDInt :: proc(id: c.int) ---
 	igPopID :: proc() ---

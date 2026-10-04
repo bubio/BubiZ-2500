@@ -107,6 +107,10 @@ foreign core {
 	start_record_sound_to :: proc(path: cstring) -> bool ---
 	stop_record_sound :: proc() ---
 
+	set_virtual_console :: proc(on: bool) ---
+	console_read :: proc(attr: ^u16, buf: [^]u8, cap: c.int) -> c.int ---
+	console_write_input :: proc(s: [^]u8, n: c.int) ---
+	console_break :: proc() ---
 	open_debugger :: proc(cpu_index: c.int) ---
 	close_debugger :: proc() ---
 	debugger_active :: proc() -> bool ---
