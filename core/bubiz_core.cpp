@@ -681,6 +681,11 @@ uint32_t bubiz_floppy_accessed(void)
 	return g_emu ? g_emu->is_floppy_disk_accessed() : 0;
 }
 
+uint32_t bubiz_floppy_indicator_color(void)
+{
+	return g_emu ? g_emu->floppy_disk_indicator_color() : 0;
+}
+
 uint32_t bubiz_hard_disk_accessed(void)
 {
 	return g_emu ? g_emu->is_hard_disk_accessed() : 0;

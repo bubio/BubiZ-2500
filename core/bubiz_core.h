@@ -110,6 +110,7 @@ void bubiz_set_romaji_to_kana(bool enable);
 
 // ドライブのアクセス状態(ビットはドライブ番号)
 uint32_t bubiz_floppy_accessed(void);
+uint32_t bubiz_floppy_indicator_color(void);	// ビットが立っていれば緑(2D/2DDの区別など)、無ければ赤
 uint32_t bubiz_hard_disk_accessed(void);
 uint32_t bubiz_tape_accessed(void);
 

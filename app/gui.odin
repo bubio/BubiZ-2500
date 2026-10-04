@@ -602,39 +602,67 @@ base_name :: proc(path: string) -> string {
 	return path[i + 1:]
 }
 
+// ImGuiColの番号
+COL_TEXT :: c_int(0)
+COL_WINDOW_BG :: c_int(2)
+COL_BORDER :: c_int(5)
+
+// ABGRの色(ImU32)
+@(private = "file")
+rgb :: proc(r, g, b: u32) -> u32 {
+	return 0xFF000000 | (b << 16) | (g << 8) | r
+}
+
+// アクセスランプ(元の実装のビットマップと同じ 14x12 の角丸)。0:消灯 1:点灯(赤) 2:点灯(緑)
+@(private = "file")
+draw_led :: proc(state: int) {
+	size := Im_Vec2{14, 12}
+	pos := igGetCursorScreenPos()
+	list := igGetWindowDrawList()
+	fill: u32
+	switch state {
+	case 1: fill = rgb(255, 0, 0)
+	case 2: fill = rgb(65, 216, 77)
+	case: fill = rgb(96, 0, 0)
+	}
+	ImDrawList_AddRectFilledEx(list, pos, {pos.x + size.x, pos.y + size.y}, rgb(64, 0, 0), 3, 0)
+	ImDrawList_AddRectFilledEx(list, {pos.x + 1, pos.y + 1}, {pos.x + size.x - 1, pos.y + size.y - 1}, fill, 2, 0)
+	igDummy(size)
+}
+
+// 元のEmuZ-2500のステータスバーと同じ表示: "FD:"と4つのランプ、"HD:"と2つのランプ、"CMT:"とテープの状態
 @(private = "file")
 draw_status_bar :: proc() {
 	vw, vh := f32(sapp.width()) / sapp.dpi_scale(), f32(sapp.height()) / sapp.dpi_scale()
 	igSetNextWindowPos({0, vh - STATUS_HEIGHT_LOGICAL}, 0)
 	igSetNextWindowSize({vw, STATUS_HEIGHT_LOGICAL}, 0)
 	flags := WINDOW_NO_TITLE_BAR | WINDOW_NO_RESIZE | WINDOW_NO_MOVE | WINDOW_NO_SCROLLBAR | WINDOW_NO_SAVED_SETTINGS | WINDOW_NO_BRING_TO_FRONT | WINDOW_NO_NAV
+	// Windowsの標準のステータスバーに合わせた、明るい灰色の背景と黒い文字
+	igPushStyleColor(COL_WINDOW_BG, rgb(240, 240, 240))
+	igPushStyleColor(COL_TEXT, rgb(0, 0, 0))
+	igPushStyleColor(COL_BORDER, rgb(160, 160, 160))
+	defer igPopStyleColorEx(3)
 	if igBegin("##statusbar", nil, flags) {
 		fd_access := floppy_accessed()
+		fd_color := floppy_indicator_color()
+		igTextUnformatted("FD:")
 		for d in 0 ..< FLOPPY_DRIVES {
-			label := "(empty)"
-			if p := string(floppy_path(i32(d))); p != "" {
-				label = base_name(p)
-			}
-			mark := "*" if (fd_access & (1 << uint(d))) != 0 else " "
-			igTextUnformatted(fmt.ctprintf("FD%d%s%s", d + 1, mark, label))
 			igSameLine()
+			state := 0
+			if (fd_access >> uint(d)) & 1 != 0 {
+				state = 2 if (fd_color >> uint(d)) & 1 != 0 else 1
+			}
+			draw_led(state)
 		}
+		igSameLine()
+		igTextUnformatted("  HD:")
 		hd_access := hard_disk_accessed()
 		for d in 0 ..< 2 {
-			mark := "*" if (hd_access & (1 << uint(d))) != 0 else " "
-			state := "(mounted)" if hard_disk_inserted(i32(d)) else "(none)"
-			igTextUnformatted(fmt.ctprintf("HD%d%s%s", d + 1, mark, state))
 			igSameLine()
+			draw_led(1 if (hd_access >> uint(d)) & 1 != 0 else 0)
 		}
-		cmt := "CMT:(empty)"
-		if tape_playing(0) {
-			cmt = "CMT:PLAY"
-		} else if tape_recording(0) {
-			cmt = "CMT:REC"
-		} else if tape_inserted(0) {
-			cmt = "CMT:STOP"
-		}
-		igTextUnformatted(fmt.ctprintf("%s %s  %.0ffps", cmt, tape_message(0), gui.fps))
+		igSameLine()
+		igTextUnformatted(fmt.ctprintf("  CMT: %s", tape_message(0)))
 	}
 	igEnd()
 }

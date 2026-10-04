@@ -88,6 +88,7 @@ foreign core {
 	stop_auto_key :: proc() ---
 	set_romaji_to_kana :: proc(enable: bool) ---
 	floppy_accessed :: proc() -> u32 ---
+	floppy_indicator_color :: proc() -> u32 ---
 	hard_disk_accessed :: proc() -> u32 ---
 	tape_accessed :: proc() -> u32 ---
 	set_option :: proc(key: cstring, value: c.int) -> bool ---

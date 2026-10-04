@@ -74,6 +74,12 @@ foreign imgui_native {
 	igEndDisabled :: proc() ---
 	igSetKeyboardFocusHere :: proc() ---
 	igGetContentRegionAvail :: proc() -> Im_Vec2 ---
+	igGetWindowDrawList :: proc() -> rawptr ---
+	igGetCursorScreenPos :: proc() -> Im_Vec2 ---
+	igDummy :: proc(size: Im_Vec2) ---
+	igPushStyleColor :: proc(idx: c.int, col: u32) ---
+	igPopStyleColorEx :: proc(count: c.int) ---
+	ImDrawList_AddRectFilledEx :: proc(self: rawptr, p_min, p_max: Im_Vec2, col: u32, rounding: f32, flags: c.int) ---
 
 	// core/../gui/gui_shim.c
 	bubiz_gui_load_font :: proc(path: cstring, size: f32) -> bool ---
