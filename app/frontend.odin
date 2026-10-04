@@ -52,7 +52,6 @@ Frontend :: struct {
 	joy_status: u32, // bit0-3: 上下左右, bit4-: ボタン
 }
 
-@(private = "file")
 fe: Frontend
 
 run_frontend :: proc(opt: Options) {
@@ -60,13 +59,13 @@ run_frontend :: proc(opt: Options) {
 
 	// 縦横比に応じた標準サイズ(640x400 / 640x480)を、-half / -double で倍率変更する
 	base_h := i32(opt.aspect_480 ? 480 : 400)
-	w, h := i32(640), base_h
+	w, h := i32(640), base_h + MENU_HEIGHT_LOGICAL
 	switch opt.window_size {
 	case .Full:
 	case .Half:
-		w, h = 320, base_h / 2
+		w, h = 320, base_h / 2 + MENU_HEIGHT_LOGICAL
 	case .Double:
-		w, h = 1280, base_h * 2
+		w, h = 1280, base_h * 2 + MENU_HEIGHT_LOGICAL
 	}
 	if opt.width > 0 {w = i32(opt.width)}
 	if opt.height > 0 {h = i32(opt.height)}
@@ -96,6 +95,7 @@ init :: proc "c" () {
 	sg.setup({environment = sglue.environment(), logger = {func = slog.func}})
 	sgl.setup({logger = {func = slog.func}})
 
+	gui_init()
 	fe.sampler = sg.make_sampler({min_filter = .NEAREST, mag_filter = .NEAREST, wrap_u = .CLAMP_TO_EDGE, wrap_v = .CLAMP_TO_EDGE})
 	fe.sampler_linear = sg.make_sampler({min_filter = .LINEAR, mag_filter = .LINEAR, wrap_u = .CLAMP_TO_EDGE, wrap_v = .CLAMP_TO_EDGE})
 	fe.filter = fe.opt.filter
@@ -217,9 +217,11 @@ frame :: proc "c" () {
 		}
 	}
 
+	gui_new_frame()
 	sg.begin_pass({action = fe.pass, swapchain = sglue.swapchain()})
 	draw_quad()
 	sgl.draw()
+	gui_render()
 	sg.end_pass()
 	sg.commit()
 
@@ -259,10 +261,12 @@ quad_rect :: proc() -> (x0, y0, qw, qh: f32) {
 	if !fe.opt.aspect_480 && aw == 640 && ah == 480 {
 		ah = 400
 	}
-	ww, wh := f32(sapp.width()), f32(sapp.height())
+	// メニューバーの下の領域に収める
+	top := gui_top_offset()
+	ww, wh := f32(sapp.width()), f32(sapp.height()) - top
 	scale := min(ww / f32(aw), wh / f32(ah))
 	qw, qh = f32(aw) * scale, f32(ah) * scale
-	return (ww - qw) * 0.5, (wh - qh) * 0.5, qw, qh
+	return (ww - qw) * 0.5, top + (wh - qh) * 0.5, qw, qh
 }
 
 // アスペクト比を保ってウィンドウ内に描く
@@ -293,6 +297,10 @@ draw_quad :: proc() {
 event :: proc "c" (e: ^sapp.Event) {
 	context = runtime.default_context()
 
+	// メニューなどGUIが使うイベントはエミュレーションへ渡さない
+	if gui_event(e) {
+		return
+	}
 	#partial switch e.type {
 	case .KEY_DOWN:
 		if handle_hotkey(e) {
@@ -366,13 +374,12 @@ handle_hotkey :: proc(e: ^sapp.Event) -> bool {
 		return true
 	case .P:
 		if ctrl {
-			sync.atomic_store(&fe.paused, !sync.atomic_load(&fe.paused))
+			action_toggle_pause()
 			return true
 		}
 	case .S:
 		if ctrl {
-			ensure_dir(fe.opt.snap_dir if fe.opt.snap_dir != "" else default_snap_dir())
-			capture_screen()
+			action_screenshot()
 			return true
 		}
 	case .M:
@@ -393,13 +400,26 @@ handle_hotkey :: proc(e: ^sapp.Event) -> bool {
 		}
 	case .J:
 		if ctrl {
-			fe.joy_mode = !fe.joy_mode
-			fe.joy_status = 0
-			set_joystick(0, 0)
+			action_toggle_joystick()
 			return true
 		}
 	}
 	return false
+}
+
+action_toggle_pause :: proc() {
+	sync.atomic_store(&fe.paused, !sync.atomic_load(&fe.paused))
+}
+
+action_screenshot :: proc() {
+	ensure_dir(fe.opt.snap_dir if fe.opt.snap_dir != "" else default_snap_dir())
+	capture_screen()
+}
+
+action_toggle_joystick :: proc() {
+	fe.joy_mode = !fe.joy_mode
+	fe.joy_status = 0
+	set_joystick(0, 0)
 }
 
 // キーボードをジョイスティックとして扱う。対象のキーならtrueを返す
@@ -436,7 +456,6 @@ mouse_button_bit :: proc(b: sapp.Mousebutton) -> i32 {
 }
 
 // マウスのキャプチャを開始/終了し、コアのマウスエミュレーションと同期させる
-@(private = "file")
 set_mouse_grab :: proc(on: bool) {
 	if fe.mouse_grab == on {
 		return
@@ -476,6 +495,7 @@ cleanup :: proc "c" () {
 	if fe.opt.sound {
 		saudio.shutdown()
 	}
+	gui_shutdown()
 	sgl.shutdown()
 	sg.shutdown()
 }

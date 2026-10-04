@@ -4,7 +4,7 @@ if(APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
   set(CMAKE_OSX_DEPLOYMENT_TARGET "14.0" CACHE STRING "macOSの最低対応バージョン")
 endif()
 
-project(bubiz_core CXX)
+project(bubiz_core CXX C)
 
 # エミュレーションコア(CSP EmuZ-2500) + ホスト層 + C APIを静的ライブラリにする
 set(CMAKE_CXX_STANDARD 17)
@@ -60,3 +60,19 @@ endif()
 # 煙テスト(ROM無しで生成・駆動・描画・音声取得ができること)
 add_executable(bubiz_smoke tests/smoke.cpp)
 target_link_libraries(bubiz_smoke PRIVATE bubiz_core)
+
+# GUI(メニュー)用: Dear ImGui(dcimgui) + 補助コード。dcimguiはscripts/setup.shが.tools/dcimguiに取得する
+set(DCIMGUI ${CMAKE_CURRENT_SOURCE_DIR}/../.tools/dcimgui/src)
+if(EXISTS ${DCIMGUI}/cimgui.cpp)
+  enable_language(C)
+  add_library(bubiz_imgui STATIC
+    ${DCIMGUI}/cimgui.cpp ${DCIMGUI}/imgui.cpp ${DCIMGUI}/imgui_demo.cpp
+    ${DCIMGUI}/imgui_draw.cpp ${DCIMGUI}/imgui_tables.cpp ${DCIMGUI}/imgui_widgets.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../gui/gui_shim.c)
+  target_include_directories(bubiz_imgui PUBLIC ${DCIMGUI})
+  if(MSVC)
+    target_compile_options(bubiz_imgui PRIVATE /w)
+  endif()
+else()
+  message(WARNING "dcimguiが見つかりません。scripts/setup.shを実行してください(GUIが無効になります)")
+endif()

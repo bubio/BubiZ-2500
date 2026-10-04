@@ -5,6 +5,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SOKOL_ODIN_REV="132fa9d26acf98cf6358a61e8baadf985196ab42"
 DEST="$ROOT/.tools/sokol-odin"
+# Dear ImGuiのCバインディング(dcimgui)。GUIのメニューに使う
+DCIMGUI_REV="ef68bcf1ea0a8218f4a2f24fb9414515ecbf5af4"
+DCIMGUI="$ROOT/.tools/dcimgui"
 
 # Odin: miseが使えるなら mise.toml に従ってインストールする
 if command -v mise >/dev/null 2>&1; then
@@ -49,4 +52,36 @@ case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*) cmd //c build_clibs_windows.cmd ;;
   *) echo "このOSではscripts/setup.shは未対応です" >&2; exit 1 ;;
 esac
+
+# dcimgui: 固定リビジョンを取得し、sokol_imguiのCライブラリをsokol-odinの規約の場所にビルドする
+# (dcimgui本体はcore/CMakeLists.txtがビルドする)
+if [ ! -d "$DCIMGUI/.git" ]; then
+  git clone https://github.com/floooh/dcimgui "$DCIMGUI"
+fi
+git -C "$DCIMGUI" fetch origin "$DCIMGUI_REV" 2>/dev/null || git -C "$DCIMGUI" fetch origin
+git -C "$DCIMGUI" checkout --quiet "$DCIMGUI_REV"
+
+cd "$DEST/sokol"
+IMGUI_OUT="$DEST/sokol/imgui"
+IMGUI_TMP="$(mktemp -d)"
+case "$(uname -s)" in
+  Linux)
+    cc -c -O2 -DNDEBUG -DIMPL -DSOKOL_GLCORE -I"$DCIMGUI/src" c/sokol_imgui.c -o "$IMGUI_TMP/sokol_imgui.o"
+    ar rcs "$IMGUI_OUT/sokol_imgui_linux_x64_gl_release.a" "$IMGUI_TMP/sokol_imgui.o"
+    cp "$IMGUI_OUT/sokol_imgui_linux_x64_gl_release.a" "$IMGUI_OUT/sokol_imgui_linux_x64_gl_debug.a"
+    ;;
+  Darwin)
+    case "$(uname -m)" in arm64) MA=arm64; MN=arm64 ;; *) MA=x86_64; MN=x64 ;; esac
+    MACOSX_DEPLOYMENT_TARGET=14.0 /usr/bin/clang -c -O2 -DNDEBUG -x objective-c -arch "$MA" -std=c11 \
+      -DIMPL -DSOKOL_METAL -I"$DCIMGUI/src" c/sokol_imgui.c -o "$IMGUI_TMP/sokol_imgui.o"
+    ar rcs "$IMGUI_OUT/sokol_imgui_macos_${MN}_metal_release.a" "$IMGUI_TMP/sokol_imgui.o"
+    cp "$IMGUI_OUT/sokol_imgui_macos_${MN}_metal_release.a" "$IMGUI_OUT/sokol_imgui_macos_${MN}_metal_debug.a"
+    ;;
+  MINGW*|MSYS*|CYGWIN*)
+    (cd "$IMGUI_TMP" && cl /nologo /c /O2 /DNDEBUG /DIMPL /DSOKOL_D3D11 /I"$(cygpath -w "$DCIMGUI/src")" "$(cygpath -w "$DEST/sokol/c/sokol_imgui.c")" \
+      && lib /nologo /OUT:"$(cygpath -w "$IMGUI_OUT/sokol_imgui_windows_x64_d3d11_release.lib")" sokol_imgui.obj)
+    cp "$IMGUI_OUT/sokol_imgui_windows_x64_d3d11_release.lib" "$IMGUI_OUT/sokol_imgui_windows_x64_d3d11_debug.lib"
+    ;;
+esac
+rm -rf "$IMGUI_TMP"
 echo "セットアップ完了"
