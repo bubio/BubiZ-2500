@@ -288,6 +288,10 @@ bool Chip::ProcessState(void *f, bool loading)
 	state_fio->StateValue(aml_);
 	state_fio->StateValue(pml_);
 	state_fio->StateValue(pmv_);
+	if(loading) {
+		// ratio_に依存するテーブルを作り直す(作らないと、ロード後に鳴らす音の音程がずれる)
+		MakeTable();
+	}
 	return true;
 }
 

@@ -216,6 +216,15 @@ bool OPNBase::ProcessState(void *f, bool loading)
 	if(!psg.ProcessState(f, loading)) {
 		return false;
 	}
+	if(loading) {
+		// LFOのテーブルも、復元したprescaleに合わせて作り直す
+		static const uint8 table2[8] = { 108,  77,  71,  67,  62,  44,  8,  5 };
+		uint ratio = chip.GetRatio();
+		for (int i=0; i<8; i++)
+		{
+			lfotable[i] = (ratio << (2+FM_LFOCBITS-FM_RATIOBITS)) / table2[i];
+		}
+	}
 	return true;
 }
 
