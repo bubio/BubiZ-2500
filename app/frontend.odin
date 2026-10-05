@@ -38,6 +38,7 @@ Frontend :: struct {
 	running:    bool, // atomic: falseにするとエミュレーションスレッドが終わる
 	paused:     bool, // atomic
 	audio_rate: i32, // 現在開いている音声出力の周波数
+	audio_buffer: i32, // 現在開いている音声出力のバッファ(フレーム数)
 	emu_frames: int, // atomic: FPS表示用の、エミュレーションを進めたフレーム数
 	last_seq:   u64, // 最後にテクスチャへ反映したフレームの番号
 	// 時間
@@ -162,15 +163,26 @@ init :: proc "c" () {
 	}
 }
 
+// サウンドのレイテンシ設定(50/100/200/300/400msec)に合わせた出力バッファのフレーム数
+@(private = "file")
+audio_buffer_frames :: proc() -> i32 {
+	switch get_option("sound_latency") {
+	case 0: return 512
+	case 4: return 2048
+	}
+	return 1024
+}
+
 // コアのサンプリング周波数に合わせて出力を開く(周波数はリセットで変わるので、変わったら開き直す)
 @(private = "file")
 setup_audio :: proc() {
 	fe.audio_rate = sound_rate()
+	fe.audio_buffer = audio_buffer_frames()
 	saudio.setup(
 		{
 			sample_rate = fe.audio_rate,
 			num_channels = 2,
-			buffer_frames = 2048,
+			buffer_frames = fe.audio_buffer,
 			stream_cb = audio_stream,
 			logger = {func = slog.func},
 		},
@@ -273,7 +285,7 @@ frame :: proc "c" () {
 	sg.end_pass()
 	sg.commit()
 
-	if fe.opt.sound && sound_rate() != fe.audio_rate {
+	if fe.opt.sound && (sound_rate() != fe.audio_rate || audio_buffer_frames() != fe.audio_buffer) {
 		saudio.shutdown()
 		setup_audio()
 	}

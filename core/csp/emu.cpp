@@ -3203,6 +3203,7 @@ bool EMU::load_state_tmp(const _TCHAR* file_path)
 #endif
 					sound_rate = sound_frequency_table[config.sound_frequency];
 					sound_samples = (int)(sound_rate * sound_latency_table[config.sound_latency] + 0.5);
+					osd->set_sound_format(sound_rate, sound_samples);
 					vm->initialize_sound(sound_rate, sound_samples);
 #ifdef USE_SOUND_VOLUME
 					for(int i = 0; i < USE_SOUND_VOLUME; i++) {

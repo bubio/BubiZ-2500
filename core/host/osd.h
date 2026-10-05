@@ -251,6 +251,7 @@ public:
 	void update_sound(int* extra_frames);
 	void mute_sound();
 	void stop_sound();
+	void set_sound_format(int rate, int samples);	// 周波数・レイテンシ変更時にチャンクとリングを作り直す
 	void start_record_sound(const _TCHAR* path = NULL);	// pathが無ければ日時付きの名前でデータディレクトリに保存
 	void stop_record_sound();
 	void restart_record_sound();
